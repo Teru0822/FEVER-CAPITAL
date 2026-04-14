@@ -5,13 +5,10 @@ public class StretchRope : MonoBehaviour
     public enum Axis { X, Y, Z, None }
 
     [Header("Animation Settings")]
-    [Tooltip("自動で伸縮するか、Spaceキーで手動操作するか")]
-    public bool autoStretch = true;
-    
     [Tooltip("伸縮スピード")]
     public float stretchSpeed = 2f;
 
-    [Tooltip("伸縮の強さ（例: 30 に設定すると、スケールが30伸びると共に、位置も最適な比率(0.01倍)で自動的に移動します）")]
+    [Tooltip("伸縮の最大強さ（例: 30 に設定すると、最大30まで伸び、位置も最適な比率(0.01倍)で自動的に移動します）")]
     public float stretchIntensity = 30f;
     
     [Header("Axis Settings")]
@@ -35,23 +32,23 @@ public class StretchRope : MonoBehaviour
     // Animator等がスケールを上書きするのを防ぐため、LateUpdateで適用します。
     void LateUpdate()
     {
-        if (autoStretch)
+        // Spaceキーを押している間だけ下に伸びる
+        if (Input.GetKey(KeyCode.Space))
         {
-            // 0 ～ 1 のサイン波
-            stretchTime = (Mathf.Sin(Time.time * stretchSpeed) + 1f) / 2f;
+            stretchTime += Time.deltaTime * stretchSpeed;
         }
         else
         {
-            if (Input.GetKey(KeyCode.Space))
-                stretchTime += Time.deltaTime * stretchSpeed;
-            else
-                stretchTime -= Time.deltaTime * stretchSpeed;
-                
-            stretchTime = Mathf.Clamp01(stretchTime);
+            // 離すと初期位置（0）まで縮む
+            stretchTime -= Time.deltaTime * stretchSpeed;
         }
+            
+        // 0（初期位置）～ 1（最大StretchIntensity）に制限
+        stretchTime = Mathf.Clamp01(stretchTime);
 
         // 滑らかな伸縮 (0 ~ 1の割合)
         float t = Mathf.SmoothStep(0, 1, stretchTime);
+
 
         // --- 伸縮の強さを決定 ---
         float currentScaleAdd = stretchIntensity * t;
