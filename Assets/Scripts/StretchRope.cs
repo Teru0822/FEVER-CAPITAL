@@ -9,8 +9,8 @@ public class StretchRope : MonoBehaviour
     [Tooltip("伸縮スピード")]
     public float stretchSpeed = 2f;
 
-    [Tooltip("伸縮の強さ（例: 30 に設定するとスケールが30伸び、位置も下へ0.3移動します）")]
-    public float stretchIntensity = 30f;
+    [Tooltip("伸縮の強さ（例: 40 に設定するとスケールが40伸び、各位置も設定した比率で自動的に移動します）")]
+    public float stretchIntensity = 40f;
     
     [Header("Axis Settings")]
     [Tooltip("どの軸方向にスケール(長さ)を伸ばすか（FBXの場合はZ軸が多いです）")]
@@ -23,9 +23,6 @@ public class StretchRope : MonoBehaviour
     [Header("Attached Object Settings")]
     [Tooltip("伸びる底面に合わせて連動して動かすオブジェクト名（7など。無効にする場合は空白）")]
     public string attachedObjectName = "7";
-
-    [Tooltip("アーム（7）が最大まで伸びた時に「どれだけ移動するか」の距離（ロープの移動量0.3の2倍である 0.6 など、目視でプレビューしながらピッタリの値に調整してください）")]
-    public float attachedMoveAmount = 0.6f;
 
     private Vector3 originalScale;
     private Vector3 originalPosition;
@@ -74,7 +71,7 @@ public class StretchRope : MonoBehaviour
 
         // --- 伸縮の強さを決定 ---
         float currentScaleAdd = stretchIntensity * t;
-        // スケールに対しての移動距離の比率（0.01倍）を固定で連動
+        // スケール30に対して移動距離0.3の比率（0.01倍）を固定で連動（ロープ本体の中心位置用）
         float currentMove = currentScaleAdd * 0.01f;
 
         // --- スケールの適用 ---
@@ -105,9 +102,8 @@ public class StretchRope : MonoBehaviour
             // --- 底面のオブジェクト（7など）の移動 ---
             if (attachedTransform != null)
             {
-                // FBXの内部ボーン構造によってローカル座標のスケールが変形してしまうのを防ぐため、
-                // 完全に独立した「手動で調整できる移動量」で連動させます。
-                float currentAttachedMove = attachedMoveAmount * t;
+                // ユーザー設定のベスト比率「Scale 40 : Move 1.9」 (0.0475倍) に固定
+                float currentAttachedMove = currentScaleAdd * 0.0475f;
                 Vector3 newAttachedPos = originalAttachedPosition;
                 
                 switch (moveAxis)
