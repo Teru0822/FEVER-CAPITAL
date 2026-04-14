@@ -9,7 +9,7 @@ public class StretchRope : MonoBehaviour
     [Tooltip("伸縮スピード")]
     public float stretchSpeed = 2f;
 
-    [Tooltip("伸縮の最大強さ（例: 30 に設定すると、最大30まで伸び、位置も最適な比率(0.01倍)で自動的に移動します）")]
+    [Tooltip("伸縮の強さ（例: 30 に設定するとスケールが30伸び、位置も下へ0.3移動します）")]
     public float stretchIntensity = 30f;
     
     [Header("Axis Settings")]
@@ -24,13 +24,15 @@ public class StretchRope : MonoBehaviour
     [Tooltip("伸びる底面に合わせて連動して動かすオブジェクト名（7など。無効にする場合は空白）")]
     public string attachedObjectName = "7";
 
+    [Tooltip("アーム（7）が最大まで伸びた時に「どれだけ移動するか」の距離（ロープの移動量0.3の2倍である 0.6 など、目視でプレビューしながらピッタリの値に調整してください）")]
+    public float attachedMoveAmount = 0.6f;
+
     private Vector3 originalScale;
     private Vector3 originalPosition;
     private float stretchTime;
 
     private Transform attachedTransform;
-    // ロープ自身（6）から見た、アーム（7）の初期相対位置（ローカル座標）
-    private Vector3 anchorLocalPoint;
+    private Vector3 originalAttachedPosition;
 
     void Start()
     {
@@ -43,9 +45,7 @@ public class StretchRope : MonoBehaviour
             if (obj != null)
             {
                 attachedTransform = obj.transform;
-                // オブジェクト7のワールド座標を、このロープ（6）のローカル座標系に変換して記憶する
-                // これにより、ロープがどんなに長くなっても「底面のこの位置」にピッタリ張り付きます
-                anchorLocalPoint = transform.InverseTransformPoint(attachedTransform.position);
+                originalAttachedPosition = attachedTransform.localPosition;
             }
         }
     }
@@ -102,13 +102,22 @@ public class StretchRope : MonoBehaviour
             }
             transform.localPosition = newPos;
 
-            // --- 底面のオブジェクト（7など）を吸着させる ---
+            // --- 底面のオブジェクト（7など）の移動 ---
             if (attachedTransform != null)
             {
-                // ロープ（6）のスケールと位置が変更された状態で、
-                // 記憶しておいた「ロープの底面にあるローカル座標」をワールド座標に戻すと、
-                // 完璧に底面表面に追従した位置が取得できます。
-                attachedTransform.position = transform.TransformPoint(anchorLocalPoint);
+                // FBXの内部ボーン構造によってローカル座標のスケールが変形してしまうのを防ぐため、
+                // 完全に独立した「手動で調整できる移動量」で連動させます。
+                float currentAttachedMove = attachedMoveAmount * t;
+                Vector3 newAttachedPos = originalAttachedPosition;
+                
+                switch (moveAxis)
+                {
+                    case Axis.X: newAttachedPos.x += currentAttachedMove * direction; break;
+                    case Axis.Y: newAttachedPos.y += currentAttachedMove * direction; break;
+                    case Axis.Z: newAttachedPos.z += currentAttachedMove * direction; break;
+                }
+                
+                attachedTransform.localPosition = newAttachedPos;
             }
         }
     }
