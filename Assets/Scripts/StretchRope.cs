@@ -2,7 +2,7 @@ using UnityEngine;
 
 public class StretchRope : MonoBehaviour
 {
-    public enum Axis { X, Y, Z }
+    public enum Axis { X, Y, Z, None }
 
     [Header("Stretch Settings")]
     [Tooltip("自動で伸縮するか、Spaceキーで手動操作するか")]
@@ -14,14 +14,16 @@ public class StretchRope : MonoBehaviour
     [Tooltip("伸縮スピード")]
     public float stretchSpeed = 2f;
     
-    [Tooltip("どの軸方向に伸ばすか（FBXの向きに合わせて変更してください。Yがダメな場合はZを試してください）")]
-    public Axis stretchAxis = Axis.Y;
+    [Header("Axis Settings")]
+    [Tooltip("どの軸方向にスケール(長さ)を伸ばすか（FBXの場合はZ軸が多いです）")]
+    public Axis scaleAxis = Axis.Z;
 
-    [Tooltip("伸びた時に位置を下に補正する係数（中心Pivotの場合は0.5、上部Pivotの場合は0など調整）")]
+    [Tooltip("位置(ポジション)をどの方向にズラすか（FBXのPivotが中心の時に上端を固定するため。基本は親空間のY軸マイナス、つまり下に移動させます）")]
+    public Axis moveAxis = Axis.Y;
+    public bool moveNegative = true;
+
+    [Tooltip("伸びた時の位置補正の強さ（中心Pivotの場合は0.5周辺で調整）")]
     public float positionOffsetMultiplier = 0.5f;
-
-    [Tooltip("補正方向を「ワールド空間の下」にするか（ONにすると、オブジェクトの回転に関わらず真下に伸びるように補正します）")]
-    public bool useWorldDownForOffset = false;
 
     private Vector3 originalScale;
     private Vector3 originalPosition;
@@ -33,7 +35,7 @@ public class StretchRope : MonoBehaviour
         originalPosition = transform.localPosition;
     }
 
-    // Animator等がスケールを上書きするのを防ぐため、LateUpdateでスケールを適用します。
+    // Animator等がスケールを上書きするのを防ぐため、LateUpdateで適用します。
     void LateUpdate()
     {
         if (autoStretch)
@@ -57,7 +59,7 @@ public class StretchRope : MonoBehaviour
 
         // 指定した軸のスケールだけを伸ばす
         Vector3 newScale = originalScale;
-        switch (stretchAxis)
+        switch (scaleAxis)
         {
             case Axis.X: newScale.x += currentStretch; break;
             case Axis.Y: newScale.y += currentStretch; break;
@@ -65,30 +67,20 @@ public class StretchRope : MonoBehaviour
         }
         transform.localScale = newScale;
 
-        // 中心固定になって両側に伸びてしまうのを防ぐため、位置を「下」へズラす
-        if (positionOffsetMultiplier != 0f)
+        // 位置の補正
+        if (positionOffsetMultiplier != 0f && moveAxis != Axis.None)
         {
             float offsetAmount = currentStretch * positionOffsetMultiplier;
-            
-            if (useWorldDownForOffset)
+            float direction = moveNegative ? -1f : 1f;
+
+            Vector3 newPos = originalPosition;
+            switch (moveAxis)
             {
-                // ワールド空間での「真下（Vector3.down）」にズラす
-                transform.position = (transform.parent != null) 
-                    ? transform.parent.TransformPoint(originalPosition) + Vector3.down * offsetAmount
-                    : originalPosition + Vector3.down * offsetAmount;
+                case Axis.X: newPos.x += offsetAmount * direction; break;
+                case Axis.Y: newPos.y += offsetAmount * direction; break;
+                case Axis.Z: newPos.z += offsetAmount * direction; break;
             }
-            else
-            {
-                // ローカル空間でのマイナス方向にズラす
-                Vector3 offsetDir = Vector3.zero;
-                switch (stretchAxis)
-                {
-                    case Axis.X: offsetDir = Vector3.left; break;
-                    case Axis.Y: offsetDir = Vector3.down; break;
-                    case Axis.Z: offsetDir = Vector3.back; break;
-                }
-                transform.localPosition = originalPosition + (offsetDir * offsetAmount);
-            }
+            transform.localPosition = newPos;
         }
     }
 }
