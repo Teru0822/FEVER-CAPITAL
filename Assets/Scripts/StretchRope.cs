@@ -4,26 +4,27 @@ public class StretchRope : MonoBehaviour
 {
     public enum Axis { X, Y, Z, None }
 
-    [Header("Stretch Settings")]
+    [Header("Animation Settings")]
     [Tooltip("自動で伸縮するか、Spaceキーで手動操作するか")]
     public bool autoStretch = true;
-    
-    [Tooltip("最大どれくらい伸びるか")]
-    public float stretchLength = 1f;
     
     [Tooltip("伸縮スピード")]
     public float stretchSpeed = 2f;
     
-    [Header("Axis Settings")]
+    [Header("Scale (伸縮) Settings")]
     [Tooltip("どの軸方向にスケール(長さ)を伸ばすか（FBXの場合はZ軸が多いです）")]
     public Axis scaleAxis = Axis.Z;
 
-    [Tooltip("位置(ポジション)をどの方向にズラすか（FBXのPivotが中心の時に上端を固定するため。基本は親空間のY軸マイナス、つまり下に移動させます）")]
+    [Tooltip("伸縮の強さ（最大でどれくらいスケールを増やすか）")]
+    public float stretchScaleAmount = 1f;
+
+    [Header("Movement (上下移動) Settings")]
+    [Tooltip("位置(ポジション)をどの方向に動かすか（親空間のY軸マイナスなど）")]
     public Axis moveAxis = Axis.Y;
     public bool moveNegative = true;
 
-    [Tooltip("伸びた時の位置補正の強さ（中心Pivotの場合は0.5周辺で調整）")]
-    public float positionOffsetMultiplier = 0.5f;
+    [Tooltip("上下移動の距離（ここで移動の強さを直接設定できるようになりました。伸びる量に合わせて微調整してください）")]
+    public float moveDistanceAmount = 0.5f;
 
     private Vector3 originalScale;
     private Vector3 originalPosition;
@@ -53,32 +54,32 @@ public class StretchRope : MonoBehaviour
             stretchTime = Mathf.Clamp01(stretchTime);
         }
 
-        // 滑らかな伸縮
+        // 滑らかな伸縮 (0 ~ 1の割合)
         float t = Mathf.SmoothStep(0, 1, stretchTime);
-        float currentStretch = stretchLength * t;
 
-        // 指定した軸のスケールだけを伸ばす
+        // --- 伸縮(スケール)の適用 ---
+        float currentScaleAdd = stretchScaleAmount * t;
         Vector3 newScale = originalScale;
         switch (scaleAxis)
         {
-            case Axis.X: newScale.x += currentStretch; break;
-            case Axis.Y: newScale.y += currentStretch; break;
-            case Axis.Z: newScale.z += currentStretch; break;
+            case Axis.X: newScale.x += currentScaleAdd; break;
+            case Axis.Y: newScale.y += currentScaleAdd; break;
+            case Axis.Z: newScale.z += currentScaleAdd; break;
         }
         transform.localScale = newScale;
 
-        // 位置の補正
-        if (positionOffsetMultiplier != 0f && moveAxis != Axis.None)
+        // --- 上下移動(位置)の適用 ---
+        if (moveAxis != Axis.None)
         {
-            float offsetAmount = currentStretch * positionOffsetMultiplier;
+            float currentMove = moveDistanceAmount * t;
             float direction = moveNegative ? -1f : 1f;
 
             Vector3 newPos = originalPosition;
             switch (moveAxis)
             {
-                case Axis.X: newPos.x += offsetAmount * direction; break;
-                case Axis.Y: newPos.y += offsetAmount * direction; break;
-                case Axis.Z: newPos.z += offsetAmount * direction; break;
+                case Axis.X: newPos.x += currentMove * direction; break;
+                case Axis.Y: newPos.y += currentMove * direction; break;
+                case Axis.Z: newPos.z += currentMove * direction; break;
             }
             transform.localPosition = newPos;
         }
