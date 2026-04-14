@@ -21,18 +21,16 @@ public class StretchRope : MonoBehaviour
     public bool moveNegative = true;
 
     [Header("Attached Object Settings")]
-    [Tooltip("伸びる先端に合わせて連動して動かすオブジェクト名（無効にする場合は空白）")]
+    [Tooltip("伸びる底面に合わせて連動して動かすオブジェクト名（7など。無効にする場合は空白）")]
     public string attachedObjectName = "7";
-
-    [Tooltip("アタッチしたオブジェクトの移動倍率（中心Pivotのオブジェクトの端に追従させるなら通常は2.0です）")]
-    public float attachedObjectMoveMultiplier = 2.0f;
 
     private Vector3 originalScale;
     private Vector3 originalPosition;
     private float stretchTime;
 
     private Transform attachedTransform;
-    private Vector3 originalAttachedPosition;
+    // ロープ自身（6）から見た、アーム（7）の初期相対位置（ローカル座標）
+    private Vector3 anchorLocalPoint;
 
     void Start()
     {
@@ -45,7 +43,9 @@ public class StretchRope : MonoBehaviour
             if (obj != null)
             {
                 attachedTransform = obj.transform;
-                originalAttachedPosition = attachedTransform.localPosition;
+                // オブジェクト7のワールド座標を、このロープ（6）のローカル座標系に変換して記憶する
+                // これにより、ロープがどんなに長くなっても「底面のこの位置」にピッタリ張り付きます
+                anchorLocalPoint = transform.InverseTransformPoint(attachedTransform.position);
             }
         }
     }
@@ -102,20 +102,13 @@ public class StretchRope : MonoBehaviour
             }
             transform.localPosition = newPos;
 
-            // 先端のオブジェクト（7オブジェクト）の連動移動
+            // --- 底面のオブジェクト（7など）を吸着させる ---
             if (attachedTransform != null)
             {
-                Vector3 newAttachedPos = originalAttachedPosition;
-                // ピボット中心のモデルが移動距離分ずれると、端の移動量はその2倍のためMultiplier(=2.0)をかける
-                float attachedMove = currentMove * attachedObjectMoveMultiplier;
-                
-                switch (moveAxis)
-                {
-                    case Axis.X: newAttachedPos.x += attachedMove * direction; break;
-                    case Axis.Y: newAttachedPos.y += attachedMove * direction; break;
-                    case Axis.Z: newAttachedPos.z += attachedMove * direction; break;
-                }
-                attachedTransform.localPosition = newAttachedPos;
+                // ロープ（6）のスケールと位置が変更された状態で、
+                // 記憶しておいた「ロープの底面にあるローカル座標」をワールド座標に戻すと、
+                // 完璧に底面表面に追従した位置が取得できます。
+                attachedTransform.position = transform.TransformPoint(anchorLocalPoint);
             }
         }
     }
