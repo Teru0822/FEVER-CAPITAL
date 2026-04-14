@@ -20,14 +20,34 @@ public class StretchRope : MonoBehaviour
     public Axis moveAxis = Axis.Y;
     public bool moveNegative = true;
 
+    [Header("Attached Object Settings")]
+    [Tooltip("伸びる先端に合わせて連動して動かすオブジェクト名（無効にする場合は空白）")]
+    public string attachedObjectName = "7";
+
+    [Tooltip("アタッチしたオブジェクトの移動倍率（中心Pivotのオブジェクトの端に追従させるなら通常は2.0です）")]
+    public float attachedObjectMoveMultiplier = 2.0f;
+
     private Vector3 originalScale;
     private Vector3 originalPosition;
     private float stretchTime;
+
+    private Transform attachedTransform;
+    private Vector3 originalAttachedPosition;
 
     void Start()
     {
         originalScale = transform.localScale;
         originalPosition = transform.localPosition;
+
+        if (!string.IsNullOrEmpty(attachedObjectName))
+        {
+            GameObject obj = GameObject.Find(attachedObjectName);
+            if (obj != null)
+            {
+                attachedTransform = obj.transform;
+                originalAttachedPosition = attachedTransform.localPosition;
+            }
+        }
     }
 
     // Animator等がスケールを上書きするのを防ぐため、LateUpdateで適用します。
@@ -52,10 +72,9 @@ public class StretchRope : MonoBehaviour
         // 滑らかな伸縮 (0 ~ 1の割合)
         float t = Mathf.SmoothStep(0, 1, stretchTime);
 
-
         // --- 伸縮の強さを決定 ---
         float currentScaleAdd = stretchIntensity * t;
-        // スケール30に対して移動距離0.3の比率（0.01倍）を固定で適用
+        // スケールに対しての移動距離の比率（0.01倍）を固定で連動
         float currentMove = currentScaleAdd * 0.01f;
 
         // --- スケールの適用 ---
@@ -73,6 +92,7 @@ public class StretchRope : MonoBehaviour
         {
             float direction = moveNegative ? -1f : 1f;
 
+            // ロープ（6オブジェクト）自身の位置移動
             Vector3 newPos = originalPosition;
             switch (moveAxis)
             {
@@ -81,6 +101,22 @@ public class StretchRope : MonoBehaviour
                 case Axis.Z: newPos.z += currentMove * direction; break;
             }
             transform.localPosition = newPos;
+
+            // 先端のオブジェクト（7オブジェクト）の連動移動
+            if (attachedTransform != null)
+            {
+                Vector3 newAttachedPos = originalAttachedPosition;
+                // ピボット中心のモデルが移動距離分ずれると、端の移動量はその2倍のためMultiplier(=2.0)をかける
+                float attachedMove = currentMove * attachedObjectMoveMultiplier;
+                
+                switch (moveAxis)
+                {
+                    case Axis.X: newAttachedPos.x += attachedMove * direction; break;
+                    case Axis.Y: newAttachedPos.y += attachedMove * direction; break;
+                    case Axis.Z: newAttachedPos.z += attachedMove * direction; break;
+                }
+                attachedTransform.localPosition = newAttachedPos;
+            }
         }
     }
 }
