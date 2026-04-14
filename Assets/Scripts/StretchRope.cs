@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 public class StretchRope : MonoBehaviour
 {
@@ -32,8 +33,10 @@ public class StretchRope : MonoBehaviour
     // Animator等がスケールを上書きするのを防ぐため、LateUpdateで適用します。
     void LateUpdate()
     {
+        bool isSpacePressed = Keyboard.current != null && Keyboard.current.spaceKey.isPressed;
+
         // Spaceキーを押している間だけ下に伸びる
-        if (Input.GetKey(KeyCode.Space))
+        if (isSpacePressed)
         {
             stretchTime += Time.deltaTime * stretchSpeed;
         }
