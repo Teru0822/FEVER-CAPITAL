@@ -1,120 +1,163 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 
+/// <summary>
+/// ロープ（オブジェクト6）の伸縮を担う。
+/// Spaceキーによる手動操作と、UFOArmController からの外部制御の両方に対応。
+/// </summary>
 public class StretchRope : MonoBehaviour
 {
     public enum Axis { X, Y, Z, None }
 
     [Header("Animation Settings")]
-    [Tooltip("伸縮スピード")]
+    [Tooltip("伸縮スピード（手動操作時）")]
     public float stretchSpeed = 2f;
 
-    [Tooltip("伸縮の強さ（例: 40 に設定するとスケールが40伸び、各位置も設定した比率で自動的に移動します）")]
-    public float stretchIntensity = 40f;
-    
+    [Tooltip("伸縮の強さ（例: 35 に設定するとスケールが35伸びます）")]
+    public float stretchIntensity = 35f;
+
     [Header("Axis Settings")]
-    [Tooltip("どの軸方向にスケール(長さ)を伸ばすか（FBXの場合はZ軸が多いです）")]
+    [Tooltip("どの軸方向にスケール(長さ)を伸ばすか")]
     public Axis scaleAxis = Axis.Z;
 
-    [Tooltip("位置(ポジション)をどの方向に動かすか（親空間のY軸マイナスなど）")]
+    [Tooltip("ロープ本体をどの方向に動かすか（中心補正用）")]
     public Axis moveAxis = Axis.Y;
     public bool moveNegative = true;
 
-    [Header("Attached Object Settings")]
-    [Tooltip("伸びる底面に合わせて連動して動かすオブジェクト名（7など。無効にする場合は空白）")]
-    public string attachedObjectName = "7";
+    [Tooltip("ロープ本体の位置補正比率（元の動作は 0.01）")]
+    public float moveRatio = 0.01f;
 
-    private Vector3 originalScale;
-    private Vector3 originalPosition;
-    private float stretchTime;
+    [Header("附属オブジェクト（finger/爪）")]
+    [Tooltip("ロープ先端に連動させるオブジェクトをInspectorからドラッグ＆ドロップで設定してください")]
+    public Transform attachedObject;
 
-    private Transform attachedTransform;
-    private Vector3 originalAttachedPosition;
+    [Tooltip("finger の移動比率（元の動作は 0.0475）")]
+    public float fingerRatio = 0.0475f;
 
+    [Header("Spaceキー操作")]
+    [Tooltip("Spaceキーによる手動伸縮を許可するか")]
+    public bool allowSpaceKey = true;
+
+    // ─────────────────────────────────────
+    // 内部状態
+    private Vector3 _originalScale;
+    private Vector3 _originalPosition;
+    private float   _stretchTime;       // 0(縮み) 〜 1(最大)
+
+    private Vector3 _originalAttachedWorldPos;
+
+    // 外部制御
+    private bool  _externalControl  = false;  // true = UFOArmController が制御中
+    private float _externalDir      = 0f;     // +1:伸びる  -1:縮む
+    private float _externalSpeedMul = 1f;
+
+    // ─────────────────────────────────────
     void Start()
     {
-        originalScale = transform.localScale;
-        originalPosition = transform.localPosition;
+        _originalScale    = transform.localScale;
+        _originalPosition = transform.localPosition;
 
-        if (!string.IsNullOrEmpty(attachedObjectName))
-        {
-            GameObject obj = GameObject.Find(attachedObjectName);
-            if (obj != null)
-            {
-                attachedTransform = obj.transform;
-                originalAttachedPosition = attachedTransform.localPosition;
-            }
-        }
+        if (attachedObject != null)
+            _originalAttachedWorldPos = attachedObject.position;
     }
 
-    // Animator等がスケールを上書きするのを防ぐため、LateUpdateで適用します。
+    // ─────────────────────────────────────
+    // 外部制御 API（UFOArmController から呼ぶ）
+
+    /// <summary>自動下降を開始（ stretchTime を 1 に向けて動かす）</summary>
+    public void StartExternalDescent(float speedMultiplier = 1f)
+    {
+        _externalControl  = true;
+        _externalDir      = 1f;
+        _externalSpeedMul = speedMultiplier;
+    }
+
+    /// <summary>自動上昇を開始（ stretchTime を 0 に向けて動かす）</summary>
+    public void StartExternalAscent(float speedMultiplier = 1f)
+    {
+        _externalControl  = true;
+        _externalDir      = -1f;
+        _externalSpeedMul = speedMultiplier;
+    }
+
+    /// <summary>外部制御を解除（Space キー操作に戻る）</summary>
+    public void StopExternalControl()
+    {
+        _externalControl = false;
+        _externalDir     = 0f;
+    }
+
+    /// <summary>最大まで伸びているか</summary>
+    public bool IsAtMax() => _stretchTime >= 1f;
+
+    /// <summary>完全に縮んでいるか</summary>
+    public bool IsAtMin() => _stretchTime <= 0f;
+
+    // ─────────────────────────────────────
     void LateUpdate()
     {
-        bool isSpacePressed = Keyboard.current != null && Keyboard.current.spaceKey.isPressed;
-
-        // Spaceキーを押している間だけ下に伸びる
-        if (isSpacePressed)
+        // ── 伸縮量の更新 ──
+        if (_externalControl)
         {
-            stretchTime += Time.deltaTime * stretchSpeed;
+            // 外部制御（自動昇降）
+            _stretchTime += _externalDir * Time.deltaTime * stretchSpeed * _externalSpeedMul;
+            _stretchTime  = Mathf.Clamp01(_stretchTime);
+
+            // 目標に到達したら外部制御を自動解除
+            if ((_externalDir > 0f && _stretchTime >= 1f) ||
+                (_externalDir < 0f && _stretchTime <= 0f))
+            {
+                StopExternalControl();
+            }
         }
-        else
+        else if (allowSpaceKey)
         {
-            // 離すと初期位置（0）まで縮む
-            stretchTime -= Time.deltaTime * stretchSpeed;
+            // 手動制御（Space キー）
+            bool spaceDown = Keyboard.current != null && Keyboard.current.spaceKey.isPressed;
+            _stretchTime += (spaceDown ? 1f : -1f) * Time.deltaTime * stretchSpeed;
+            _stretchTime  = Mathf.Clamp01(_stretchTime);
         }
-            
-        // 0（初期位置）～ 1（最大StretchIntensity）に制限
-        stretchTime = Mathf.Clamp01(stretchTime);
 
-        // 滑らかな伸縮 (0 ~ 1の割合)
-        float t = Mathf.SmoothStep(0, 1, stretchTime);
+        float t        = Mathf.SmoothStep(0f, 1f, _stretchTime);
+        float scaleAdd = stretchIntensity * t;
 
-        // --- 伸縮の強さを決定 ---
-        float currentScaleAdd = stretchIntensity * t;
-        // スケール30に対して移動距離0.3の比率（0.01倍）を固定で連動（ロープ本体の中心位置用）
-        float currentMove = currentScaleAdd * 0.01f;
-
-        // --- スケールの適用 ---
-        Vector3 newScale = originalScale;
+        // ── ロープ本体のスケール ──
+        Vector3 newScale = _originalScale;
         switch (scaleAxis)
         {
-            case Axis.X: newScale.x += currentScaleAdd; break;
-            case Axis.Y: newScale.y += currentScaleAdd; break;
-            case Axis.Z: newScale.z += currentScaleAdd; break;
+            case Axis.X: newScale.x += scaleAdd; break;
+            case Axis.Y: newScale.y += scaleAdd; break;
+            case Axis.Z: newScale.z += scaleAdd; break;
         }
         transform.localScale = newScale;
 
-        // --- 上下移動(位置)の適用 ---
+        // ── ロープ本体の位置（中心補正） ──
         if (moveAxis != Axis.None)
         {
-            float direction = moveNegative ? -1f : 1f;
-
-            // ロープ（6オブジェクト）自身の位置移動
-            Vector3 newPos = originalPosition;
+            float   dir    = moveNegative ? -1f : 1f;
+            float   move   = scaleAdd * moveRatio;
+            Vector3 newPos = _originalPosition;
             switch (moveAxis)
             {
-                case Axis.X: newPos.x += currentMove * direction; break;
-                case Axis.Y: newPos.y += currentMove * direction; break;
-                case Axis.Z: newPos.z += currentMove * direction; break;
+                case Axis.X: newPos.x += move * dir; break;
+                case Axis.Y: newPos.y += move * dir; break;
+                case Axis.Z: newPos.z += move * dir; break;
             }
             transform.localPosition = newPos;
+        }
 
-            // --- 底面のオブジェクト（7など）の移動 ---
-            if (attachedTransform != null)
+        // ── finger の追従（ワールド座標ベース） ──
+        if (attachedObject != null)
+        {
+            float   dir       = moveNegative ? -1f : 1f;
+            Vector3 targetPos = _originalAttachedWorldPos;
+            switch (moveAxis)
             {
-                // ユーザー設定のベスト比率「Scale 40 : Move 1.9」 (0.0475倍) に固定
-                float currentAttachedMove = currentScaleAdd * 0.0475f;
-                Vector3 newAttachedPos = originalAttachedPosition;
-                
-                switch (moveAxis)
-                {
-                    case Axis.X: newAttachedPos.x += currentAttachedMove * direction; break;
-                    case Axis.Y: newAttachedPos.y += currentAttachedMove * direction; break;
-                    case Axis.Z: newAttachedPos.z += currentAttachedMove * direction; break;
-                }
-                
-                attachedTransform.localPosition = newAttachedPos;
+                case Axis.X: targetPos.x += scaleAdd * fingerRatio * dir; break;
+                case Axis.Y: targetPos.y += scaleAdd * fingerRatio * dir; break;
+                case Axis.Z: targetPos.z += scaleAdd * fingerRatio * dir; break;
             }
+            attachedObject.position = targetPos;
         }
     }
 }
