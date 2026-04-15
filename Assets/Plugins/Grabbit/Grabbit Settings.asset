@@ -299,7 +299,7 @@ MonoBehaviour:
     m_Focused:
       m_Background: {fileID: 0}
       m_ScaledBackgrounds: []
-      m_TextColor: {r: 0.8235294, g: 0.8235294, b: 0.8235294, a: 1}
+      m_TextColor: {r: 0.93333334, g: 0.93333334, b: 0.93333334, a: 1}
     m_OnNormal:
       m_Background: {fileID: 0}
       m_ScaledBackgrounds:
@@ -313,11 +313,11 @@ MonoBehaviour:
       m_Background: {fileID: 0}
       m_ScaledBackgrounds:
       - {fileID: 1411127090212124673, guid: 0000000000000000d000000000000000, type: 0}
-      m_TextColor: {r: 0.8235294, g: 0.8235294, b: 0.8235294, a: 1}
+      m_TextColor: {r: 0.93333334, g: 0.93333334, b: 0.93333334, a: 1}
     m_OnFocused:
       m_Background: {fileID: 0}
       m_ScaledBackgrounds: []
-      m_TextColor: {r: 0.8235294, g: 0.8235294, b: 0.8235294, a: 1}
+      m_TextColor: {r: 0.93333334, g: 0.93333334, b: 0.93333334, a: 1}
     m_Border:
       m_Left: 6
       m_Right: 6
@@ -370,7 +370,7 @@ MonoBehaviour:
     m_Focused:
       m_Background: {fileID: 0}
       m_ScaledBackgrounds: []
-      m_TextColor: {r: 0.8235294, g: 0.8235294, b: 0.8235294, a: 1}
+      m_TextColor: {r: 0.93333334, g: 0.93333334, b: 0.93333334, a: 1}
     m_OnNormal:
       m_Background: {fileID: 0}
       m_ScaledBackgrounds:
@@ -384,11 +384,11 @@ MonoBehaviour:
       m_Background: {fileID: 0}
       m_ScaledBackgrounds:
       - {fileID: 1411127090212124673, guid: 0000000000000000d000000000000000, type: 0}
-      m_TextColor: {r: 0.8235294, g: 0.8235294, b: 0.8235294, a: 1}
+      m_TextColor: {r: 0.93333334, g: 0.93333334, b: 0.93333334, a: 1}
     m_OnFocused:
       m_Background: {fileID: 0}
       m_ScaledBackgrounds: []
-      m_TextColor: {r: 0.8235294, g: 0.8235294, b: 0.8235294, a: 1}
+      m_TextColor: {r: 0.93333334, g: 0.93333334, b: 0.93333334, a: 1}
     m_Border:
       m_Left: 6
       m_Right: 6
@@ -835,8 +835,7 @@ MonoBehaviour:
   TabStyle:
     m_Name: window
     m_Normal:
-      m_Background: {fileID: 3030029797350296259, guid: 0000000000000000d000000000000000,
-        type: 0}
+      m_Background: {fileID: 3030029797350296259, guid: 0000000000000000d000000000000000, type: 0}
       m_ScaledBackgrounds:
       - {fileID: -7783218991985073443, guid: 0000000000000000d000000000000000, type: 0}
       m_TextColor: {r: 0.8235294, g: 0.8235294, b: 0.8235294, a: 1}
@@ -853,8 +852,7 @@ MonoBehaviour:
       m_ScaledBackgrounds: []
       m_TextColor: {r: 0, g: 0, b: 0, a: 1}
     m_OnNormal:
-      m_Background: {fileID: 8058632875595140008, guid: 0000000000000000d000000000000000,
-        type: 0}
+      m_Background: {fileID: 8058632875595140008, guid: 0000000000000000d000000000000000, type: 0}
       m_ScaledBackgrounds:
       - {fileID: 5918955158733009358, guid: 0000000000000000d000000000000000, type: 0}
       m_TextColor: {r: 0.8235294, g: 0.8235294, b: 0.8235294, a: 1}
@@ -1039,7 +1037,7 @@ MonoBehaviour:
     m_FixedHeight: 0
     m_StretchWidth: 1
     m_StretchHeight: 0
-  ShowStartupWindow: 1
+  ShowStartupWindow: 0
   LastVersion: 0.0
   LimitationRange:
     position: {x: 55.97266, y: -18.20076, z: 5.7097964}
@@ -1060,7 +1058,7 @@ MonoBehaviour:
   ColliderResolution: 300000
   velocityIterations: 10
   solverIterations: 10
-  useLowQualityConvexCollidersOnSelection: 1
+  useLowQualityConvexCollidersOnSelection: 0
   UseLimitationZone: 0
   Constraints: 0
   JungleLogo: {fileID: 2800000, guid: 1e021604d3033604dbbdf0af3615fbe5, type: 3}
@@ -1086,7 +1084,7 @@ MonoBehaviour:
   SetKinematicWhenNotActive: 1
   UseSoftCollision: 1
   DisplayWarning: 1
-  useNormalFactor: 0
+  useNormalFactor: 1
   MaxNormalSpeedFactor: 0.7
   debugCollisionDirection: 0
   MaxPhysXIterationPerUpdate: 1
@@ -1101,7 +1099,7 @@ MonoBehaviour:
   StaticObjectsLayer: 0
   AlignStrength: 1
   ExtraDragForRotationMode: 100
-  GravityStrength: {x: -1.4227866e-10, y: -9.777315, z: -0.0000011655469}
+  GravityStrength: {x: -1.3944167e-10, y: -9.582358, z: -0.0000011423062}
   LimitBodyVelocityInGravityMode: 0
   SetGravityInDirectionOfMouse: 0
   PausePositionReajustment: 1
@@ -1110,7 +1108,7 @@ MonoBehaviour:
   CollisionMaxVelocity: 1
   MaxAngularVelocity: 10
   MaxDepenetrationVelocity: 10
-  UseBoundDependantValues: 0
+  UseBoundDependantValues: 1
   CollisionMinBoundFactor: 0.3
   CollisionMaxBoundFactor: 1
   BoundVolumeForMinSpeed: 0.001
