@@ -26,9 +26,6 @@ public class PinballBallController : MonoBehaviour
     [Tooltip("分裂後に左右へ広がる速度（m/s）")]
     [SerializeField] private float splitSpread = 1f;
 
-    [Tooltip("分裂後の速度の上限（m/s）")]
-    [SerializeField] private float maxSplitSpeed = 3f;
-
     private bool hasSplit = false;
     private Rigidbody rb;
 
@@ -62,28 +59,25 @@ public class PinballBallController : MonoBehaviour
 
         hasSplit = true;
 
-        // ★ 衝突した瞬間の位置・速度を記録（コルーチン待機中にずれるのを防ぐ）
+        // 衝突した瞬間の位置を記録（コルーチン待機中にずれるのを防ぐ）
         Vector3 posAtCollision = transform.position;
-        Vector3 velAtCollision = rb.linearVelocity;
-        float   cappedSpeed   = Mathf.Min(velAtCollision.magnitude, maxSplitSpeed);
-        Vector3 safeVelocity  = cappedSpeed > 0.01f
-            ? velAtCollision.normalized * cappedSpeed
-            : Vector3.zero;
 
-        StartCoroutine(SplitNextFrame(posAtCollision, safeVelocity, collision.collider));
+        StartCoroutine(SplitNextFrame(posAtCollision, collision.collider));
     }
 
-    IEnumerator SplitNextFrame(Vector3 posAtCollision, Vector3 safeVelocity, Collider splitTargetCollider)
+    IEnumerator SplitNextFrame(Vector3 posAtCollision, Collider splitTargetCollider)
     {
         yield return new WaitForFixedUpdate();
 
         Vector3 halfScale = transform.localScale * 0.5f;
+
+        // ★ 親の速度を引き継がず、左右の広がりだけ与える
+        //    床と重ならないよう Y+ 方向に半径分だけ上にオフセットしてスポーン
+        Vector3 spawnBase = posAtCollision + Vector3.up * halfScale.y;
         Vector3 spreadDir = Vector3.right * splitSpread;
 
-        // ★ 法線オフセットを廃止し衝突位置をそのままスポーン地点として使用
-        //    （法線方向への移動が床下生成の原因だった）
-        SpawnSplitBall(posAtCollision + Vector3.right * halfScale.x, safeVelocity + spreadDir, halfScale, splitTargetCollider);
-        SpawnSplitBall(posAtCollision + Vector3.left  * halfScale.x, safeVelocity - spreadDir, halfScale, splitTargetCollider);
+        SpawnSplitBall(spawnBase + Vector3.right * halfScale.x,  spreadDir, halfScale, splitTargetCollider);
+        SpawnSplitBall(spawnBase + Vector3.left  * halfScale.x, -spreadDir, halfScale, splitTargetCollider);
 
         Destroy(gameObject);
     }
