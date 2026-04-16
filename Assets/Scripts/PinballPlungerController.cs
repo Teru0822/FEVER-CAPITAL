@@ -14,10 +14,10 @@ public class PinballPlungerController : MonoBehaviour
 {
     [Header("ばね設定")]
     [Tooltip("ばね定数（大きいほど振動が速い）")]
-    [SerializeField] private float springConstant = 200f;
+    [SerializeField] private float springConstant = 800f;
 
     [Tooltip("減衰係数（0にすると純粋な単振動）")]
-    [SerializeField] private float damping = 2f;
+    [SerializeField] private float damping = 1f;
 
     [Header("操作設定")]
     [Tooltip("SPACEキー押下時のZ軸移動速度")]
