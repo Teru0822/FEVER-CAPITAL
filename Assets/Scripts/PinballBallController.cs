@@ -217,7 +217,8 @@ public class PinballBallController : MonoBehaviour
 
     void SpawnParticleBurst(Vector3 position)
     {
-        ParticleSystem ps = Instantiate(splitParticlePrefab, position, Quaternion.identity);
+        // プレハブの回転を引き継ぐ（Shape モジュールの方向設定を活かすため）
+        ParticleSystem ps = Instantiate(splitParticlePrefab, position, splitParticlePrefab.transform.rotation);
         ps.Emit(particleBurstCount);
         // プレハブ側で StopAction = Destroy を設定しておくと自動消滅
     }
