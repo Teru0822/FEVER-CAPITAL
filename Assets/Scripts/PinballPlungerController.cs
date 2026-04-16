@@ -7,7 +7,7 @@ using UnityEngine.InputSystem;
 /// - 現在位置をばねの自然長とする
 /// - SPACEキー：Z軸正方向へ引っ張り（最大Z座標 maxZ まで）
 /// - SPACEキーを離す：単振動（ばねの復元力）
-/// - 衝突判定は「5」オブジェクトのみ
+/// - 衝突判定：「4」自身は「5」のみ、子オブジェクト(col1等)は「1」とも衝突
 /// </summary>
 [RequireComponent(typeof(Rigidbody))]
 public class PinballPlungerController : MonoBehaviour
@@ -27,17 +27,18 @@ public class PinballPlungerController : MonoBehaviour
     [SerializeField] private float maxZ = 4.804f;
 
     [Header("衝突設定")]
-    [Tooltip("当たり判定を持つオブジェクトの名前（「5」オブジェクト）")]
+    [Tooltip("当たり判定を持つボールオブジェクトの名前")]
     [SerializeField] private string ballObjectName = "5";
+
+    [Tooltip("col1が衝突するレールオブジェクトの名前")]
+    [SerializeField] private string railObjectName = "1";
 
     private Rigidbody rb;
     private float naturalZ;    // ばねの自然長（初期Z座標）
-    private Collider myCollider;
 
     void Start()
     {
         rb = GetComponent<Rigidbody>();
-        myCollider = GetComponent<Collider>();
 
         // 自然長として初期Z座標を記録
         naturalZ = transform.position.z;
@@ -48,26 +49,68 @@ public class PinballPlungerController : MonoBehaviour
                        | RigidbodyConstraints.FreezeRotation;
         rb.useGravity = false;
 
-        // 「5」オブジェクト以外との衝突を無視
+        // すり抜け防止：高速移動時も連続的に衝突検出
+        rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
+
+        // 衝突ルールを設定
         SetupCollisionIgnore();
     }
 
     /// <summary>
-    /// シーン内の全コライダーを検索し、「5」オブジェクト以外との衝突を無視する。
+    /// 衝突ルール：
+    /// - 「4」自身のコライダー → 「5」のみ衝突、他は無視
+    /// - 子オブジェクト（col1等）のコライダー → 「5」と「1」に衝突、他は無視
     /// </summary>
     void SetupCollisionIgnore()
     {
-        if (myCollider == null) return;
-
+        // 「5」（ボール）のコライダーを取得
         GameObject ball = GameObject.Find(ballObjectName);
-        Collider ballCollider = ball != null ? ball.GetComponentInChildren<Collider>() : null;
+        Collider[] ballColliders = ball != null
+            ? ball.GetComponentsInChildren<Collider>()
+            : new Collider[0];
 
+        // 「1」（レール）のコライダーを取得
+        GameObject rail = GameObject.Find(railObjectName);
+        Collider[] railColliders = rail != null
+            ? rail.GetComponentsInChildren<Collider>()
+            : new Collider[0];
+
+        // シーン内の全コライダー
         Collider[] allColliders = FindObjectsByType<Collider>(FindObjectsSortMode.None);
-        foreach (Collider col in allColliders)
+
+        // 「4」自身のコライダー（直接アタッチ分）
+        Collider myCollider = GetComponent<Collider>();
+
+        // 「4」の子コライダー（col1等）
+        Collider[] childColliders = GetComponentsInChildren<Collider>();
+
+        foreach (Collider mine in childColliders)
         {
-            if (col == myCollider) continue;
-            if (col == ballCollider) continue;
-            Physics.IgnoreCollision(myCollider, col);
+            bool isSelf     = (mine == myCollider);
+            bool isChild    = !isSelf;   // col1などの子コライダー
+
+            foreach (Collider other in allColliders)
+            {
+                // 自分自身はスキップ
+                bool isMyCollider = System.Array.IndexOf(childColliders, other) >= 0;
+                if (isMyCollider) continue;
+
+                bool isBall = System.Array.IndexOf(ballColliders, other) >= 0;
+                bool isRail = System.Array.IndexOf(railColliders, other) >= 0;
+
+                if (isSelf)
+                {
+                    // 「4」本体：「5」以外を無視
+                    if (!isBall)
+                        Physics.IgnoreCollision(mine, other);
+                }
+                else
+                {
+                    // 子（col1等）：「5」と「1」以外を無視
+                    if (!isBall && !isRail)
+                        Physics.IgnoreCollision(mine, other);
+                }
+            }
         }
     }
 
