@@ -71,6 +71,9 @@ public class PinballBallController : MonoBehaviour
     [Tooltip("手動物理ボールが動ける範囲のYmin（地面）")]
     public float manualBoundsYMin = 0.008f;
 
+    [Tooltip("手動物理ボールが動ける範囲のYmax（地面）")]
+    public float manualBoundsYMax = 0.113f;
+
     [Tooltip("手動物理ボールが動ける範囲のZmax（奥側の壁）")]
     public float manualBoundsZMax = 4.468f;
 
@@ -80,6 +83,9 @@ public class PinballBallController : MonoBehaviour
 
     [Tooltip("手動物理ボールが Splitter を検知する球判定の半径")]
     public float manualSplitterCheckRadius = 0.05f;
+
+    [Tooltip("手動物理ボールの寿命（秒）。経過するとプールへ自動返却される。0以下で無効")]
+    public float manualLifetime = 5f;
 
     [Header("パーティクル非表示領域")]
     [Tooltip("X座標がこの値以下かつZ座標がhideParticleZMin以上の領域ではパーティクルを生成しない")]
@@ -102,6 +108,7 @@ public class PinballBallController : MonoBehaviour
     private Vector3 _manualVelocity = Vector3.zero;
     private Collider _ignoredSplitter = null;
     private float _ignoreSplitterUntil = 0f;
+    private float _manualExpireAt = 0f;
 
     private Rigidbody rb;
     private SphereCollider sphereCol;
@@ -171,6 +178,7 @@ public class PinballBallController : MonoBehaviour
         _manualVelocity = Vector3.zero;
         _ignoredSplitter = null;
         _ignoreSplitterUntil = 0f;
+        _manualExpireAt = 0f;
     }
 
     void FixedUpdate()
@@ -186,6 +194,13 @@ public class PinballBallController : MonoBehaviour
     void Update()
     {
         if (!_isManualPhysics) return;
+
+        // 寿命到達でプールへ返却
+        if (manualLifetime > 0f && Time.time >= _manualExpireAt)
+        {
+            ReturnToPool();
+            return;
+        }
 
         float dt = Time.deltaTime;
         float gravityMag = Mathf.Abs(Physics.gravity.y);
@@ -210,6 +225,11 @@ public class PinballBallController : MonoBehaviour
         if (pos.y < manualBoundsYMin)
         {
             pos.y = manualBoundsYMin;
+            if (_manualVelocity.y < 0f) _manualVelocity.y = -_manualVelocity.y * manualBounceFactor;
+        }
+        if (pos.y > manualBoundsYMax)
+        {
+            pos.y = manualBoundsYMax;
             if (_manualVelocity.y < 0f) _manualVelocity.y = -_manualVelocity.y * manualBounceFactor;
         }
         if (pos.z > manualBoundsZMax)
@@ -260,7 +280,7 @@ public class PinballBallController : MonoBehaviour
 
         bool useManual = useManualPhysicsForHighGen
                       && particleGeneration > 0
-                      && (generation == particleGeneration - 1 || generation == particleGeneration - 2);
+                      && (generation == particleGeneration - 1);
 
         _isManualPhysics = useManual;
 
@@ -274,6 +294,7 @@ public class PinballBallController : MonoBehaviour
             _manualVelocity = initialVelocity;
             _ignoredSplitter = ignoreSplitter;
             _ignoreSplitterUntil = Time.time + ignoreCollisionDuration;
+            _manualExpireAt = Time.time + manualLifetime;
         }
         else
         {
