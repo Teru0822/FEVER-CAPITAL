@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.VFX;
 
 /// <summary>
 /// ピンボールの「5」オブジェクト（ボール）制御スクリプト。
@@ -55,7 +56,16 @@ public class PinballBallController : MonoBehaviour
     [Tooltip("この世代以降は Rigidbody ボールではなく ParticleSystem で表現する（負の値で無効）")]
     public int particleGeneration = 4;
 
-    [Tooltip("particleGeneration 以降に使用するパーティクルプレハブ（ParticleSystem 付き）")]
+    [Tooltip("particleGeneration 以降に使用する VFX Graph プレハブ（VisualEffect 付き）。割り当てられている場合はこちらが優先される")]
+    public VisualEffect splitVfxPrefab;
+
+    [Tooltip("VFX Graph の Exposed Property 名（int）。粒子数を渡す。空欄なら設定しない")]
+    public string vfxSpawnCountProperty = "SpawnCount";
+
+    [Tooltip("VFX Graph の自動破棄までの秒数（VFX Graph には StopAction が無いため手動破棄）")]
+    public float vfxLifetime = 3f;
+
+    [Tooltip("particleGeneration 以降に使用するパーティクルプレハブ（VFX未割当時のフォールバック）")]
     public ParticleSystem splitParticlePrefab;
 
     [Tooltip("パーティクルバースト1回あたりの粒子数")]
@@ -164,11 +174,21 @@ public class PinballBallController : MonoBehaviour
         int nextGen = _generation + 1;
 
         // particleGeneration 以降はパーティクルバーストに切り替えて Rigidbody は生成しない
-        if (particleGeneration >= 0 && nextGen >= particleGeneration && splitParticlePrefab != null)
+        // VFX Graph が割り当てられていれば優先、なければ ParticleSystem
+        if (particleGeneration >= 0 && nextGen >= particleGeneration)
         {
-            SpawnParticleBurst(posAtCollision);
-            ReturnToPool();
-            yield break;
+            if (splitVfxPrefab != null)
+            {
+                SpawnVfxBurst(posAtCollision);
+                ReturnToPool();
+                yield break;
+            }
+            if (splitParticlePrefab != null)
+            {
+                SpawnParticleBurst(posAtCollision);
+                ReturnToPool();
+                yield break;
+            }
         }
 
         int count = Mathf.Max(2, splitCount);
@@ -220,6 +240,21 @@ public class PinballBallController : MonoBehaviour
         ParticleSystem ps = Instantiate(splitParticlePrefab, position, Quaternion.identity);
         ps.Emit(particleBurstCount);
         // プレハブ側で StopAction = Destroy を設定しておくと自動消滅
+    }
+
+    void SpawnVfxBurst(Vector3 position)
+    {
+        VisualEffect vfx = Instantiate(splitVfxPrefab, position, Quaternion.identity);
+
+        // 粒子数を Exposed Property 経由で渡す（プロパティが定義されている場合のみ）
+        if (!string.IsNullOrEmpty(vfxSpawnCountProperty) && vfx.HasInt(vfxSpawnCountProperty))
+            vfx.SetInt(vfxSpawnCountProperty, particleBurstCount);
+
+        vfx.Play();
+
+        // VFX Graph には ParticleSystem.StopAction.Destroy 相当が無いため明示的に破棄
+        if (vfxLifetime > 0f)
+            Destroy(vfx.gameObject, vfxLifetime);
     }
 
     /// <summary>
