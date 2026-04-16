@@ -12,8 +12,8 @@ using UnityEngine;
 ///   - 世代ごとにXオフセットは自動的に半分になる
 /// - 最適化:
 ///   - ボール同士の衝突を Layer Collision Matrix で無効化
-///   - Object Pool による Instantiate/Destroy 削減
 ///   - particleGeneration 以降はパーティクルバーストに切り替え
+///   - 高世代ボールは Rigidbody を捨てて手動物理 + ライフタイムで自動 Destroy
 /// </summary>
 [RequireComponent(typeof(Rigidbody))]
 [RequireComponent(typeof(SphereCollider))]
@@ -113,8 +113,6 @@ public class PinballBallController : MonoBehaviour
     private Rigidbody rb;
     private SphereCollider sphereCol;
 
-    // 静的Object Pool（全ボールで共有）
-    private static Stack<GameObject> _pool = new Stack<GameObject>();
     private static int _ballLayer = -1;
     private static bool _ballLayerCollisionDisabled = false;
 
@@ -326,7 +324,7 @@ public class PinballBallController : MonoBehaviour
         if (particleGeneration >= 0 && nextGen >= particleGeneration && splitParticlePrefab != null)
         {
             SpawnParticleBurst(posAtCollision);
-            ReturnToPool();
+            DestroySelf();
             yield break;
         }
 
@@ -343,12 +341,12 @@ public class PinballBallController : MonoBehaviour
             SpawnSplitBall(spawnPos, vel, nextScale, splitTargetCollider, nextGen);
         }
 
-        ReturnToPool();
+        DestroySelf();
     }
 
     void SpawnSplitBall(Vector3 position, Vector3 velocity, Vector3 scale, Collider ignoreCollider, int generation)
     {
-        GameObject child = GetFromPool(position);
+        GameObject child = SpawnNew(position);
         child.transform.localScale = scale;
 
         PinballBallController ctrl = child.GetComponent<PinballBallController>();
@@ -379,38 +377,19 @@ public class PinballBallController : MonoBehaviour
     }
 
     /// <summary>
-    /// プールから1個取り出す。空ならInstantiateで新規作成。
+    /// 子ボールを Instantiate で新規生成する。
     /// </summary>
-    GameObject GetFromPool(Vector3 position)
+    GameObject SpawnNew(Vector3 position)
     {
-        while (_pool.Count > 0)
-        {
-            GameObject obj = _pool.Pop();
-            if (obj == null) continue; // シーン遷移などで破棄済みの参照はスキップ
-            obj.transform.position = position;
-            obj.transform.rotation = transform.rotation;
-            obj.SetActive(true);
-            return obj;
-        }
         return Instantiate(gameObject, position, transform.rotation);
     }
 
     /// <summary>
-    /// このボールを非アクティブ化してプールへ返す。
+    /// このボールをヒエラルキーから完全に削除する。
     /// </summary>
-    void ReturnToPool()
+    void DestroySelf()
     {
-        // 手動物理モードのままだと kinematic Rigidbody への velocity 代入で警告が出るため通常モードへ戻す
-        rb.isKinematic = false;
-        rb.useGravity = true;
-        rb.linearVelocity = Vector3.zero;
-        rb.angularVelocity = Vector3.zero;
-
-        _isManualPhysics = false;
-        _manualVelocity = Vector3.zero;
-
-        gameObject.SetActive(false);
-        _pool.Push(gameObject);
+        Destroy(gameObject);
     }
 
     IEnumerator RestoreCollision(Collider col, Collider other, float delay)
