@@ -58,6 +58,13 @@ public class PinballBallController : MonoBehaviour
     [Tooltip("particleGeneration 以降に使用するパーティクルプレハブ（ParticleSystem 付き）。粒子数や方向はプレハブ側のEmission/Shape/Max Particlesで設定")]
     public ParticleSystem splitParticlePrefab;
 
+    [Header("パーティクル非表示領域")]
+    [Tooltip("X座標がこの値以下かつZ座標がhideParticleZMin以上の領域ではパーティクルを生成しない")]
+    public float hideParticleXMax = 0.75f;
+
+    [Tooltip("Z座標がこの値以上かつX座標がhideParticleXMax以下の領域ではパーティクルを生成しない")]
+    public float hideParticleZMin = 4.515f;
+
     // 実際にこのボールが分裂するときのXオフセット（世代ごとに半減）
     private float _currentXOffset;
 
@@ -214,6 +221,10 @@ public class PinballBallController : MonoBehaviour
 
     void SpawnParticleBurst(Vector3 position)
     {
+        // 非表示領域内ならパーティクルを生成しない
+        if (position.x <= hideParticleXMax && position.z >= hideParticleZMin)
+            return;
+
         // プレハブの回転を引き継ぐ（Shape モジュールの方向設定を活かすため）
         ParticleSystem ps = Instantiate(splitParticlePrefab, position, splitParticlePrefab.transform.rotation);
         // プレハブ側の Emission / Max Particles / Bursts 設定を尊重する
