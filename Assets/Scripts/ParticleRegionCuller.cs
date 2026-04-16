@@ -36,7 +36,7 @@ public class ParticleRegionCuller : MonoBehaviour
         for (int i = 0; i < actual; i++)
         {
             Vector3 worldPos = isLocalSpace ? tr.TransformPoint(buffer[i].position) : buffer[i].position;
-            if (worldPos.x <= hideXMax && worldPos.z >= hideZMin && buffer[i].remainingLifetime > 0f)
+            if ((worldPos.x <= hideXMax || worldPos.z >= hideZMin) && buffer[i].remainingLifetime > 0f)
             {
                 ParticleSystem.Particle p = buffer[i];
                 p.remainingLifetime = 0f;
