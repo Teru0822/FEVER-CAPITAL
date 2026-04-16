@@ -27,11 +27,11 @@ public class StretchRope : MonoBehaviour
     [Tooltip("ロープ本体の位置補正比率（元の動作は 0.01）")]
     public float moveRatio = 0.01f;
 
-    [Header("附属オブジェクト（finger/爪）")]
-    [Tooltip("ロープ先端に連動させるオブジェクトをInspectorからドラッグ＆ドロップで設定してください")]
-    public Transform attachedObject;
+    [Header("附属オブジェクト（finger/爪・4・5・6など）")]
+    [Tooltip("ロープ先端の上下に合わせて連動させたいオブジェクト群を全て設定してください")]
+    public Transform[] attachedObjects;
 
-    [Tooltip("finger の移動比率（元の動作は 0.0475）")]
+    [Tooltip("finger等の移動比率（元の動作は 0.0475）")]
     public float fingerRatio = 0.0475f;
 
     [Header("Spaceキー操作")]
@@ -44,7 +44,7 @@ public class StretchRope : MonoBehaviour
     private Vector3 _originalPosition;
     private float   _stretchTime;       // 0(縮み) 〜 1(最大)
 
-    private Vector3 _originalAttachedWorldPos;
+    private Vector3[] _originalAttachedLocalPos;
 
     // 外部制御
     private bool  _externalControl  = false;  // true = UFOArmController が制御中
@@ -57,8 +57,15 @@ public class StretchRope : MonoBehaviour
         _originalScale    = transform.localScale;
         _originalPosition = transform.localPosition;
 
-        if (attachedObject != null)
-            _originalAttachedWorldPos = attachedObject.position;
+        if (attachedObjects != null && attachedObjects.Length > 0)
+        {
+            _originalAttachedLocalPos = new Vector3[attachedObjects.Length];
+            for (int i = 0; i < attachedObjects.Length; i++)
+            {
+                if (attachedObjects[i] != null)
+                    _originalAttachedLocalPos[i] = attachedObjects[i].localPosition;
+            }
+        }
     }
 
     // ─────────────────────────────────────
@@ -136,28 +143,60 @@ public class StretchRope : MonoBehaviour
         {
             float   dir    = moveNegative ? -1f : 1f;
             float   move   = scaleAdd * moveRatio;
-            Vector3 newPos = _originalPosition;
+            
+            // 親が動いた（横移動した）分を加味した現在の「本来あるべきワールド座標」を算出
+            Vector3 baseWorldPos = (transform.parent != null) 
+                                 ? transform.parent.TransformPoint(_originalPosition) 
+                                 : _originalPosition;
+
+            // アームの親パーツが回転（Blenderなどによる-90度等）していても、必ず「ワールド軸」で真っ直ぐ動かす
             switch (moveAxis)
             {
-                case Axis.X: newPos.x += move * dir; break;
-                case Axis.Y: newPos.y += move * dir; break;
-                case Axis.Z: newPos.z += move * dir; break;
+                case Axis.X: baseWorldPos.x += move * dir; break;
+                case Axis.Y: baseWorldPos.y += move * dir; break;
+                case Axis.Z: baseWorldPos.z += move * dir; break;
             }
-            transform.localPosition = newPos;
+            transform.position = baseWorldPos;
         }
 
-        // ── finger の追従（ワールド座標ベース） ──
-        if (attachedObject != null)
+        // ── finger等の追従（Sway位置反映） ──
+        if (attachedObjects != null && attachedObjects.Length > 0)
         {
-            float   dir       = moveNegative ? -1f : 1f;
-            Vector3 targetPos = _originalAttachedWorldPos;
-            switch (moveAxis)
+            float dir     = moveNegative ? -1f : 1f;
+            float moveAdd = scaleAdd * fingerRatio * dir;
+
+            // 回転による振り子運動の位置ズレを反映するため、UFOArmController から今の揺れ角度をもらう
+            UFOArmController arm = FindAnyObjectByType<UFOArmController>();
+            Quaternion swayRot = (arm != null) ? arm.currentSwayRot : Quaternion.identity;
+
+            // ロープの根本（ここが振り子の支点になる）
+            Vector3 pivotWorldPos = transform.position;
+
+            for (int i = 0; i < attachedObjects.Length; i++)
             {
-                case Axis.X: targetPos.x += scaleAdd * fingerRatio * dir; break;
-                case Axis.Y: targetPos.y += scaleAdd * fingerRatio * dir; break;
-                case Axis.Z: targetPos.z += scaleAdd * fingerRatio * dir; break;
+                if (attachedObjects[i] == null) continue;
+
+                // もし揺れていなかった場合の「本来の真下」にあるワールド座標
+                Vector3 baseWorldPos = (attachedObjects[i].parent != null)
+                                     ? attachedObjects[i].parent.TransformPoint(_originalAttachedLocalPos[i])
+                                     : _originalAttachedLocalPos[i];
+
+                switch (moveAxis)
+                {
+                    case Axis.X: baseWorldPos.x += moveAdd; break;
+                    case Axis.Y: baseWorldPos.y += moveAdd; break;
+                    case Axis.Z: baseWorldPos.z += moveAdd; break;
+                }
+
+                // 支点から、爪の「真下座標」までのベクトル（真っ直ぐなロープ）
+                Vector3 downwardVec = baseWorldPos - pivotWorldPos;
+                
+                // それを揺れ角度で回転させる（振り子のように円を描いてスイングする）
+                Vector3 swayedVec = swayRot * downwardVec;
+
+                // 最終的なワールド座標を更新
+                attachedObjects[i].position = pivotWorldPos + swayedVec;
             }
-            attachedObject.position = targetPos;
         }
     }
 }

@@ -23,6 +23,11 @@ public class LeverController : MonoBehaviour
     [Tooltip("操作時の重さ（慣性）。小さいほど重く・遅れて動き、大きいほど軽く・キビキビ動きます")]
     public float weightDamping = 10f;
 
+    [Header("操作アシスト（斜めブレ防止）")]
+    [Tooltip("縦・横の入力がどちらかに偏っている時、弱い方のブレ入力を無効化する強さ。\n0で完全な斜め自由、1で完全に十字方向（上下または左右専用）に固定します。")]
+    [Range(0f, 1f)]
+    public float axisSnapAssist = 0.6f;
+
     [Header("方向反転（見た目が逆の場合にチェック）")]
     public bool invertHorizontal = false;
     public bool invertVertical   = false;
@@ -124,10 +129,6 @@ public class LeverController : MonoBehaviour
             transform.rotation = worldRot;
     }
 
-    /// <summary>
-    /// アームの XZ 移動用の入力を UFOArmController に送る。
-    /// カメラの向きを考慮した方向に変換する。
-    /// </summary>
     void UpdateArmInput()
     {
         if (Camera.main == null || armController == null) return;
@@ -139,6 +140,23 @@ public class LeverController : MonoBehaviour
 
         float normH = _angleH / leverMaxAngle;
         float normV = _angleV / leverMaxAngle;
+
+        // 【斜め入力のブレ防止（スナップ）】
+        // アームに送る値だけに適用し、レバーの見た目は360度自由に傾くようにする
+        if (axisSnapAssist > 0f)
+        {
+            float absH = Mathf.Abs(normH);
+            float absV = Mathf.Abs(normV);
+
+            if (absH > absV)
+            {
+                if (absV < absH * axisSnapAssist) normV = 0f; // 完全に横移動
+            }
+            else if (absV > absH)
+            {
+                if (absH < absV * axisSnapAssist) normH = 0f; // 完全に縦移動
+            }
+        }
 
         Vector3 moveDir = camXZRight * normH + camXZForward * normV;
         armController.SetLeverInput(moveDir.x, moveDir.z);

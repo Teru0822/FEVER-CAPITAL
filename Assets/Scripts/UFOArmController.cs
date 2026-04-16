@@ -6,7 +6,7 @@ using UnityEngine;
 /// </summary>
 public class UFOArmController : MonoBehaviour
 {
-    public enum ArmState { Idle, Moving, Descending, Grabbing, Ascending }
+    public enum ArmState { Idle, Moving, OpeningClaw, Descending, Grabbing, Ascending }
 
     // ─────────────────────────────────────
     [Header("アーム参照")]
@@ -26,17 +26,19 @@ public class UFOArmController : MonoBehaviour
     [Header("XZ 移動設定")]
     [Tooltip("レバー入力に対するアーム移動速度")]
     public float moveSpeed = 3f;
-    [Tooltip("初期位置からの移動限界（X方向）")]
-    public float moveRangeX = 5f;
-    [Tooltip("初期位置からの移動限界（Z方向）")]
-    public float moveRangeZ = 5f;
+    [Header("移動範囲の指定（Sceneビューで赤い枠が見えます）")]
+    public Vector2 playAreaCenter = new Vector2(0f, 0f); // Xが左右、YがZ(奥手前)方向
+    public Vector2 playAreaSize   = new Vector2(9f, 9f);
 
     // ─────────────────────────────────────
     [Header("爪（finger）設定")]
     [Tooltip("finger.001〜.004 を配列に設定してください")]
     public Transform[] fingerParts;
-    [Tooltip("爪が開いたときのローカルX軸回転角度（上向きに開く場合は正の値）")]
+    [Tooltip("爪が開いたときのローカルX軸回転角度（開き幅）")]
     public float fingerOpenAngle = 40f;
+    [Tooltip("逆に閉まる方向に動いてしまう指がある場合、ここのListにチェックを入れて反転させてください（0が001用、1が002用など）")]
+    public bool[] invertFingerAngle;
+
     [Tooltip("指の開閉スピード")]
     public float fingerSpeed = 4f;
 
@@ -46,17 +48,36 @@ public class UFOArmController : MonoBehaviour
     public float descentSpeedMultiplier = 1.5f;
     [Tooltip("掴んでから上昇を開始するまでの待機秒数")]
     public float grabWaitSeconds = 0.5f;
-
     // ─────────────────────────────────────
     // 内部状態
     private ArmState _state = ArmState.Idle;
     private Vector2  _leverInput;
     private Vector3  _armInitialPos;
-    private float    _grabTimer;
+    private float    _stateTimer; // 様々な待機タイマー兼用
 
     private Quaternion[] _fingerDefaultRot;
     private Quaternion[] _fingerOpenRot;
+    private Quaternion[] _fingerCurrentBaseRot; // 開閉の純粋な回転を保持
     private bool         _wantFingerOpen = false;
+
+    // ─────────────────────────────────────
+    [Header("揺れ（Sway）設定")]
+    [Tooltip("指以外の、一緒に揺らしたいパーツ（6番のロープなど）を指定します")]
+    public Transform[] extraSwayParts;
+    private Quaternion[] _extraSwayDefaultRot;
+
+    [Tooltip("揺れの強さ（感度）")]
+    public float swaySensitivity = 2f;
+    [Tooltip("揺れが静まるまでの時間（ダンピング）")]
+    public float swayDamping = 3f;
+    [Tooltip("振り子の戻る力（バネの強さ）")]
+    public float swaySpringForce = 15f;
+
+    private Vector3 _lastWorldPos;
+    private Vector3 _velocity;
+    private Vector3 _swayAngle;
+    private Vector3 _swayVelocity;
+    public Quaternion currentSwayRot { get; private set; } = Quaternion.identity;
 
     // ─────────────────────────────────────
     void Start()
@@ -68,13 +89,36 @@ public class UFOArmController : MonoBehaviour
         {
             _fingerDefaultRot = new Quaternion[fingerParts.Length];
             _fingerOpenRot    = new Quaternion[fingerParts.Length];
+            _fingerCurrentBaseRot = new Quaternion[fingerParts.Length];
             for (int i = 0; i < fingerParts.Length; i++)
             {
                 if (fingerParts[i] == null) continue;
                 _fingerDefaultRot[i] = fingerParts[i].localRotation;
-                _fingerOpenRot[i]    = Quaternion.Euler(fingerOpenAngle, 0f, 0f) * _fingerDefaultRot[i];
+
+                float angle = fingerOpenAngle;
+                // インバート指定があれば角度を反転
+                if (invertFingerAngle != null && i < invertFingerAngle.Length && invertFingerAngle[i])
+                {
+                    angle = -fingerOpenAngle;
+                }
+
+                _fingerOpenRot[i]    = Quaternion.Euler(angle, 0f, 0f) * _fingerDefaultRot[i];
+                _fingerCurrentBaseRot[i] = _fingerDefaultRot[i];
             }
         }
+
+        // その他揺らすパーツの初期回転を記録
+        if (extraSwayParts != null && extraSwayParts.Length > 0)
+        {
+            _extraSwayDefaultRot = new Quaternion[extraSwayParts.Length];
+            for (int i = 0; i < extraSwayParts.Length; i++)
+            {
+                if (extraSwayParts[i] != null)
+                    _extraSwayDefaultRot[i] = extraSwayParts[i].localRotation;
+            }
+        }
+
+        if (armRoot != null) _lastWorldPos = armRoot.position;
     }
 
     // ─────────────────────────────────────
@@ -88,17 +132,20 @@ public class UFOArmController : MonoBehaviour
     public void StartDescentCycle()
     {
         if (_state != ArmState.Idle && _state != ArmState.Moving) return;
-        _state = ArmState.Descending;
+        
+        // すぐ下降せず、まず爪を上に開くフェーズに入る
+        _state = ArmState.OpeningClaw;
         _wantFingerOpen = true;
-        stretchRope?.StartExternalDescent(descentSpeedMultiplier);
+        _stateTimer = 1.0f; // 1秒間待機する
     }
 
     // ─────────────────────────────────────
     void Update()
     {
         UpdateMovement();
+        UpdateSwayPhysics();
         UpdateRailFollow();
-        UpdateFingers();
+        UpdateFingersAndSway();
         UpdateStateMachine();
     }
 
@@ -114,11 +161,48 @@ public class UFOArmController : MonoBehaviour
         pos.x += _leverInput.x * moveSpeed * Time.deltaTime;
         pos.z += _leverInput.y * moveSpeed * Time.deltaTime;
 
-        pos.x = Mathf.Clamp(pos.x, _armInitialPos.x - moveRangeX, _armInitialPos.x + moveRangeX);
-        pos.z = Mathf.Clamp(pos.z, _armInitialPos.z - moveRangeZ, _armInitialPos.z + moveRangeZ);
+        // 手動で設定した赤い枠(Gizmos)の範囲内に強制クリップ
+        float halfX = playAreaSize.x / 2f;
+        float halfZ = playAreaSize.y / 2f;
+        pos.x = Mathf.Clamp(pos.x, playAreaCenter.x - halfX, playAreaCenter.x + halfX);
+        pos.z = Mathf.Clamp(pos.z, playAreaCenter.y - halfZ, playAreaCenter.y + halfZ);
 
         armRoot.position = pos;
-        _state = (_leverInput.sqrMagnitude > 0.01f) ? ArmState.Moving : ArmState.Idle;
+        
+        // コントロール中のみ状態をMovingにする（操作不可ステート時は維持）
+        if (_state == ArmState.Idle || _state == ArmState.Moving)
+        {
+            _state = (_leverInput.sqrMagnitude > 0.01f) ? ArmState.Moving : ArmState.Idle;
+        }
+    }
+
+    void UpdateSwayPhysics()
+    {
+        if (armRoot == null) return;
+        if (Time.deltaTime == 0f) return;
+
+        // 座標から現在の移動速度（Velocity）を取得
+        Vector3 currentPos = armRoot.position;
+        Vector3 currentVel = (currentPos - _lastWorldPos) / Time.deltaTime;
+        _lastWorldPos = currentPos;
+
+        // 【移動ベースの揺れ】
+        // アームが移動している時、空気抵抗や慣性のように「移動方向と逆」に傾かせる目標角度
+        Vector3 targetSway = new Vector3(currentVel.z, 0f, -currentVel.x) * swaySensitivity;
+
+        // 【バネ（スプリング）の単振動シミュレーション】
+        // 常に targetSway に向かって引っ張られ、行き過ぎて揺れる
+        Vector3 angleDiff = targetSway - _swayAngle;
+        Vector3 springAccel = (angleDiff * swaySpringForce) - (_swayVelocity * swayDamping);
+
+        _swayVelocity += springAccel * Time.deltaTime;
+        _swayAngle += _swayVelocity * Time.deltaTime;
+
+        // 暴れすぎないように最大角度を制限
+        _swayAngle.x = Mathf.Clamp(_swayAngle.x, -50f, 50f);
+        _swayAngle.z = Mathf.Clamp(_swayAngle.z, -50f, 50f);
+
+        currentSwayRot = Quaternion.Euler(_swayAngle.x, 0f, _swayAngle.z);
     }
 
     void UpdateRailFollow()
@@ -142,15 +226,32 @@ public class UFOArmController : MonoBehaviour
         }
     }
 
-    void UpdateFingers()
+    void UpdateFingersAndSway()
     {
-        if (fingerParts == null) return;
-        for (int i = 0; i < fingerParts.Length; i++)
+        // 爪（finger）に対する開閉と揺れの合成
+        if (fingerParts != null && fingerParts.Length > 0)
         {
-            if (fingerParts[i] == null) continue;
-            var target = _wantFingerOpen ? _fingerOpenRot[i] : _fingerDefaultRot[i];
-            fingerParts[i].localRotation = Quaternion.Slerp(
-                fingerParts[i].localRotation, target, Time.deltaTime * fingerSpeed);
+            for (int i = 0; i < fingerParts.Length; i++)
+            {
+                if (fingerParts[i] == null) continue;
+
+                // 開閉アニメーションの補間（揺れを含まないピュアな状態）
+                Quaternion targetBaseRot = _wantFingerOpen ? _fingerOpenRot[i] : _fingerDefaultRot[i];
+                _fingerCurrentBaseRot[i] = Quaternion.Lerp(_fingerCurrentBaseRot[i], targetBaseRot, Time.deltaTime * fingerSpeed);
+
+                // ピュアな開閉状態に、物理的な揺れ（Sway）を合成してセット
+                fingerParts[i].localRotation = currentSwayRot * _fingerCurrentBaseRot[i];
+            }
+        }
+
+        // その他（6番ロープなど）に対する揺れの適用
+        if (extraSwayParts != null && extraSwayParts.Length > 0)
+        {
+            for (int i = 0; i < extraSwayParts.Length; i++)
+            {
+                if (extraSwayParts[i] == null) continue;
+                extraSwayParts[i].localRotation = currentSwayRot * _extraSwayDefaultRot[i];
+            }
         }
     }
 
@@ -158,20 +259,30 @@ public class UFOArmController : MonoBehaviour
     {
         switch (_state)
         {
+            case ArmState.OpeningClaw:
+                // 指定時間（1秒）待ってから下降をスタートする
+                _stateTimer -= Time.deltaTime;
+                if (_stateTimer <= 0f)
+                {
+                    _state = ArmState.Descending;
+                    stretchRope?.StartExternalDescent(descentSpeedMultiplier);
+                }
+                break;
+
             case ArmState.Descending:
                 // StretchRope が最大まで伸びたら「掴む」へ
                 if (stretchRope != null && stretchRope.IsAtMax())
                 {
                     _state = ArmState.Grabbing;
                     _wantFingerOpen = false;
-                    _grabTimer = grabWaitSeconds;
+                    _stateTimer = grabWaitSeconds;
                     stretchRope.StartExternalAscent(descentSpeedMultiplier);
                 }
                 break;
 
             case ArmState.Grabbing:
-                _grabTimer -= Time.deltaTime;
-                if (_grabTimer <= 0f)
+                _stateTimer -= Time.deltaTime;
+                if (_stateTimer <= 0f)
                     _state = ArmState.Ascending;
                 break;
 
