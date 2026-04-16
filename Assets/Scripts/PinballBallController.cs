@@ -19,8 +19,8 @@ public class PinballBallController : MonoBehaviour
     public float bounciness = 0.5f;
 
     [Header("分裂設定")]
-    [Tooltip("衝突時に分裂するオブジェクトの名前")]
-    public string splitTargetName = "2";
+    [Tooltip("衝突時に分裂するオブジェクトのタグ（Unity の Tag を指定）")]
+    public string splitTargetTag = "Splitter";
 
     [Tooltip("分裂後に左右へ広がる速度（m/s）")]
     public float splitSpread = 1f;
@@ -72,7 +72,7 @@ public class PinballBallController : MonoBehaviour
     void OnCollisionEnter(Collision collision)
     {
         if (_isSplitting) return;
-        if (!collision.gameObject.name.Equals(splitTargetName)) return;
+        if (!collision.gameObject.CompareTag(splitTargetTag)) return;
 
         _isSplitting = true;
 
