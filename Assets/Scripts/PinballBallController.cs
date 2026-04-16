@@ -25,6 +25,14 @@ public class PinballBallController : MonoBehaviour
     [Tooltip("分裂後に左右へ広がる速度（m/s）")]
     public float splitSpread = 1f;
 
+    [Tooltip("分裂数（2以上）")]
+    [Min(2)]
+    public int splitCount = 2;
+
+    [Tooltip("分裂後のスケール倍率（0〜1）。例：0.5なら半分のサイズ")]
+    [Range(0.01f, 1f)]
+    public float splitScaleRatio = 0.5f;
+
     [Tooltip("分裂後のスポーン位置をY軸上方向にずらす量")]
     public float spawnUpOffset = 0.5f;
 
@@ -86,13 +94,19 @@ public class PinballBallController : MonoBehaviour
     {
         yield return new WaitForFixedUpdate();
 
-        Vector3 halfScale = transform.localScale * 0.5f;
+        int count = Mathf.Max(2, splitCount);
+        Vector3 nextScale = transform.localScale * splitScaleRatio;
         Vector3 spawnBase = posAtCollision + Vector3.up * spawnUpOffset;
-        Vector3 spreadDir = Vector3.right * splitSpread;
 
-        // 左右にスポーン（_currentXOffset を使用）
-        SpawnSplitBall(spawnBase + Vector3.right * _currentXOffset,  spreadDir, halfScale, splitTargetCollider);
-        SpawnSplitBall(spawnBase + Vector3.left  * _currentXOffset, -spreadDir, halfScale, splitTargetCollider);
+        // -_currentXOffset 〜 +_currentXOffset の範囲に count 個を等間隔配置
+        // 速度も同じ比率で左右に広がる
+        for (int i = 0; i < count; i++)
+        {
+            float t = (count == 1) ? 0f : ((float)i / (count - 1)) * 2f - 1f; // -1 〜 +1
+            Vector3 spawnPos = spawnBase + Vector3.right * (_currentXOffset * t);
+            Vector3 vel = Vector3.right * (splitSpread * t);
+            SpawnSplitBall(spawnPos, vel, nextScale, splitTargetCollider);
+        }
 
         Destroy(gameObject);
     }
