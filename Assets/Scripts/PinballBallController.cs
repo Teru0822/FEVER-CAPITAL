@@ -16,9 +16,11 @@ public class PinballBallController : MonoBehaviour
     [Tooltip("弾性係数（0:完全非弾性 〜 1:完全弾性）")]
     [SerializeField] private float bounciness = 0.5f;
 
+    private Rigidbody rb;
+
     void Awake()
     {
-        Rigidbody rb = GetComponent<Rigidbody>();
+        rb = GetComponent<Rigidbody>();
         rb.mass = mass;
         rb.useGravity = true;
         // 全軸の移動・回転を許可（デフォルト）
@@ -33,5 +35,11 @@ public class PinballBallController : MonoBehaviour
         mat.frictionCombine  = PhysicsMaterialCombine.Average;
         mat.bounceCombine    = PhysicsMaterialCombine.Maximum;
         col.material = mat;
+    }
+
+    void FixedUpdate()
+    {
+        // Z軸正方向に重力と同じ大きさの力を常に加える（mass × gravity）
+        rb.AddForce(new Vector3(0f, 0f, rb.mass * Mathf.Abs(Physics.gravity.y)), ForceMode.Force);
     }
 }
