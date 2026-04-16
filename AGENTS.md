@@ -1,3 +1,12 @@
+## ⚠️ AIエージェントへの必須指示
+
+**作業を開始する前に、このファイル（AGENTS.md）を必ず読むこと。**
+その後、[`Docs/01_Rules_and_Policies/04_AI_Agents/AIAgentRules.md`](Docs/01_Rules_and_Policies/04_AI_Agents/AIAgentRules.md) および [`Docs/01_Rules_and_Policies/03_Workflows/GitWorkflow.md`](Docs/01_Rules_and_Policies/03_Workflows/GitWorkflow.md) を読んでから作業に着手すること。
+
+**「簡単な作業だから確認不要」という判断は認めない。**
+
+---
+
 ## 1. このファイルの目的
 このファイル（`AGENTS.md`）は、本プロジェクト（FEVER CAPITAL）における AI エージェントおよび開発メンバー向けの共通運用ルールの「ハブ（ポータル）」として機能します。
 
