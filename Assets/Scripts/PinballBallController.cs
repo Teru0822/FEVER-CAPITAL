@@ -195,10 +195,10 @@ public class PinballBallController : MonoBehaviour
     {
         if (!_isManualPhysics) return;
 
-        // 寿命到達でプールへ返却
+        // 寿命到達でヒエラルキーから完全削除（プール返却ではなく Destroy）
         if (manualLifetime > 0f && Time.time >= _manualExpireAt)
         {
-            ReturnToPool();
+            Destroy(gameObject);
             return;
         }
 
