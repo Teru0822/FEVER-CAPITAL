@@ -227,6 +227,12 @@ public class PinballBallController : MonoBehaviour
 
         // プレハブの回転を引き継ぐ（Shape モジュールの方向設定を活かすため）
         ParticleSystem ps = Instantiate(splitParticlePrefab, position, splitParticlePrefab.transform.rotation);
+
+        // 領域に侵入した粒子を毎フレーム消滅させる Culler を追加
+        ParticleRegionCuller culler = ps.gameObject.AddComponent<ParticleRegionCuller>();
+        culler.hideXMax = hideParticleXMax;
+        culler.hideZMin = hideParticleZMin;
+
         // プレハブ側の Emission / Max Particles / Bursts 設定を尊重する
         ps.Play();
         // プレハブ側で StopAction = Destroy を設定しておくと自動消滅
