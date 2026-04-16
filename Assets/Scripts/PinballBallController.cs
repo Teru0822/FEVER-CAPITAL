@@ -14,17 +14,23 @@ public class PinballBallController : MonoBehaviour
 {
     [Header("ボール設定")]
     [Tooltip("ボールの質量")]
-    [SerializeField] private float mass = 0.5f;
+    public float mass = 0.5f;
 
     [Tooltip("弾性係数（0:完全非弾性 〜 1:完全弾性）")]
-    [SerializeField] private float bounciness = 0.5f;
+    public float bounciness = 0.5f;
 
     [Header("分裂設定")]
     [Tooltip("衝突時に分裂するオブジェクトの名前")]
-    [SerializeField] private string splitTargetName = "2";
+    public string splitTargetName = "2";
 
     [Tooltip("分裂後に左右へ広がる速度（m/s）")]
-    [SerializeField] private float splitSpread = 1f;
+    public float splitSpread = 1f;
+
+    [Tooltip("分裂後のスポーン位置をY軸上方向にずらす量（床との重なり防止）")]
+    public float spawnUpOffset = 0.5f;
+
+    [Tooltip("分裂後に「2」との衝突を無視する時間（秒）")]
+    public float ignoreCollisionDuration = 0.4f;
 
     private bool hasSplit = false;
     private Rigidbody rb;
@@ -73,7 +79,7 @@ public class PinballBallController : MonoBehaviour
 
         // ★ 親の速度を引き継がず、左右の広がりだけ与える
         //    床と重ならないよう Y+ 方向に半径分だけ上にオフセットしてスポーン
-        Vector3 spawnBase = posAtCollision + Vector3.up * halfScale.y;
+        Vector3 spawnBase = posAtCollision + Vector3.up * spawnUpOffset;
         Vector3 spreadDir = Vector3.right * splitSpread;
 
         SpawnSplitBall(spawnBase + Vector3.right * halfScale.x,  spreadDir, halfScale, splitTargetCollider);
@@ -94,12 +100,12 @@ public class PinballBallController : MonoBehaviour
         if (childRb != null)
             childRb.linearVelocity = velocity;
 
-        // 「2」との衝突を0.4秒間無視（スポーン位置重複による吹き飛びを防止）
+        // 「2」との衝突を一定時間無視（スポーン位置重複による吹き飛びを防止）
         Collider childCol = child.GetComponent<Collider>();
         if (childCol != null && ignoreCollider != null)
         {
             Physics.IgnoreCollision(childCol, ignoreCollider, true);
-            ctrl?.StartCoroutine(RestoreCollision(childCol, ignoreCollider, 0.4f));
+            ctrl?.StartCoroutine(RestoreCollision(childCol, ignoreCollider, ignoreCollisionDuration));
         }
     }
 
