@@ -29,9 +29,7 @@ public class PinballBallController : MonoBehaviour
     [Tooltip("分裂後の速度の上限（m/s）")]
     [SerializeField] private float maxSplitSpeed = 3f;
 
-    // 分裂済みフラグ（分裂したボールが再分裂しないようにする）
     private bool hasSplit = false;
-
     private Rigidbody rb;
 
     void Awake()
@@ -54,7 +52,6 @@ public class PinballBallController : MonoBehaviour
 
     void FixedUpdate()
     {
-        // Z軸正方向に重力と同じ大きさの力を常に加える
         rb.AddForce(new Vector3(0f, 0f, rb.mass * Mathf.Abs(Physics.gravity.y)), ForceMode.Force);
     }
 
@@ -65,42 +62,32 @@ public class PinballBallController : MonoBehaviour
 
         hasSplit = true;
 
-        // ★ 衝突直後に速度と法線を記録（コルーチン後だと反発速度になって大きすぎる）
+        // ★ 衝突した瞬間の位置・速度を記録（コルーチン待機中にずれるのを防ぐ）
+        Vector3 posAtCollision = transform.position;
         Vector3 velAtCollision = rb.linearVelocity;
         float   cappedSpeed   = Mathf.Min(velAtCollision.magnitude, maxSplitSpeed);
-        Vector3 safeVelocity  = (cappedSpeed > 0.01f)
+        Vector3 safeVelocity  = cappedSpeed > 0.01f
             ? velAtCollision.normalized * cappedSpeed
             : Vector3.zero;
 
-        // 衝突面の法線（「2」から離れる方向）
-        Vector3 contactNormal  = collision.contacts[0].normal;
-        Collider targetCollider = collision.collider;
-
-        StartCoroutine(SplitNextFrame(safeVelocity, contactNormal, targetCollider));
+        StartCoroutine(SplitNextFrame(posAtCollision, safeVelocity, collision.collider));
     }
 
-    /// <summary>
-    /// 1フレーム待ってから分裂する。
-    /// </summary>
-    IEnumerator SplitNextFrame(Vector3 safeVelocity, Vector3 normal, Collider splitTargetCollider)
+    IEnumerator SplitNextFrame(Vector3 posAtCollision, Vector3 safeVelocity, Collider splitTargetCollider)
     {
         yield return new WaitForFixedUpdate();
 
         Vector3 halfScale = transform.localScale * 0.5f;
-
-        // ★ 衝突面の法線方向に十分離してスポーン（コライダー重複を回避）
-        Vector3 spawnBase = transform.position + normal * halfScale.x * 3f;
         Vector3 spreadDir = Vector3.right * splitSpread;
 
-        SpawnSplitBall(spawnBase + Vector3.right * halfScale.x, safeVelocity + spreadDir, halfScale, splitTargetCollider);
-        SpawnSplitBall(spawnBase + Vector3.left  * halfScale.x, safeVelocity - spreadDir, halfScale, splitTargetCollider);
+        // ★ 法線オフセットを廃止し衝突位置をそのままスポーン地点として使用
+        //    （法線方向への移動が床下生成の原因だった）
+        SpawnSplitBall(posAtCollision + Vector3.right * halfScale.x, safeVelocity + spreadDir, halfScale, splitTargetCollider);
+        SpawnSplitBall(posAtCollision + Vector3.left  * halfScale.x, safeVelocity - spreadDir, halfScale, splitTargetCollider);
 
         Destroy(gameObject);
     }
 
-    /// <summary>
-    /// 分裂後のボールを生成する。
-    /// </summary>
     void SpawnSplitBall(Vector3 position, Vector3 velocity, Vector3 scale, Collider ignoreCollider)
     {
         GameObject child = Instantiate(gameObject, position, transform.rotation);
@@ -113,15 +100,12 @@ public class PinballBallController : MonoBehaviour
         if (childRb != null)
             childRb.linearVelocity = velocity;
 
-        // 生成直後0.4秒間は「2」との衝突を無視（重なりによる吹き飛びを防止）
-        if (ignoreCollider != null)
+        // 「2」との衝突を0.4秒間無視（スポーン位置重複による吹き飛びを防止）
+        Collider childCol = child.GetComponent<Collider>();
+        if (childCol != null && ignoreCollider != null)
         {
-            Collider childCol = child.GetComponent<Collider>();
-            if (childCol != null)
-            {
-                Physics.IgnoreCollision(childCol, ignoreCollider, true);
-                ctrl?.StartCoroutine(RestoreCollision(childCol, ignoreCollider, 0.4f));
-            }
+            Physics.IgnoreCollision(childCol, ignoreCollider, true);
+            ctrl?.StartCoroutine(RestoreCollision(childCol, ignoreCollider, 0.4f));
         }
     }
 
