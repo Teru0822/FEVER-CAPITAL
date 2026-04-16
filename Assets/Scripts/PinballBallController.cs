@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
@@ -6,8 +7,13 @@ using UnityEngine;
 /// - 全オブジェクトに対して当たり判定を持つ
 /// - 「4」オブジェクトに押されて飛び出す
 /// - Z軸正方向に重力と同じ大きさの力を常に受ける
-/// - 「2」オブジェクトに衝突するたびに半分サイズで二分裂する
-///   （分裂のX方向オフセットは世代ごとに半分になる）
+/// - splitTargetTag のオブジェクトに衝突するたびに分裂する
+///   - 分裂数・サイズ・X方向オフセットは Inspector で設定可
+///   - 世代ごとにXオフセットは自動的に半分になる
+/// - 最適化:
+///   - ボール同士の衝突を Layer Collision Matrix で無効化
+///   - Object Pool による Instantiate/Destroy 削減
+///   - particleGeneration 以降はパーティクルバーストに切り替え
 /// </summary>
 [RequireComponent(typeof(Rigidbody))]
 [RequireComponent(typeof(SphereCollider))]
@@ -39,17 +45,38 @@ public class PinballBallController : MonoBehaviour
     [Tooltip("一回目の分裂時の左右Xオフセット（以降の世代は自動的に半分になる）")]
     public float spawnXOffset = 0.5f;
 
-    [Tooltip("「2」との衝突を無視する時間（秒）")]
+    [Tooltip("splitTargetTagとの衝突を無視する時間（秒）")]
     public float ignoreCollisionDuration = 0.4f;
 
+    [Header("最適化設定")]
+    [Tooltip("分裂ボールが配置されるレイヤー名（同レイヤー同士の衝突は自動で無効化される）")]
+    public string ballLayerName = "Ball";
+
+    [Tooltip("この世代以降は Rigidbody ボールではなく ParticleSystem で表現する（負の値で無効）")]
+    public int particleGeneration = 4;
+
+    [Tooltip("particleGeneration 以降に使用するパーティクルプレハブ（ParticleSystem 付き）")]
+    public ParticleSystem splitParticlePrefab;
+
+    [Tooltip("パーティクルバースト1回あたりの粒子数")]
+    public int particleBurstCount = 30;
+
     // 実際にこのボールが分裂するときのXオフセット（世代ごとに半減）
-    // Awake後にSpawnSplitBallから上書きされる
     private float _currentXOffset;
 
-    // 同一フレームでの二重分裂を防ぐフラグ
+    // 同一フレームでの二重分裂を防ぐフラグ（FixedUpdate冒頭でリセット）
     private bool _isSplitting = false;
 
+    // このボールの世代（0=初期、1=1回分裂後、…）
+    private int _generation = 0;
+
     private Rigidbody rb;
+    private SphereCollider sphereCol;
+
+    // 静的Object Pool（全ボールで共有）
+    private static Stack<GameObject> _pool = new Stack<GameObject>();
+    private static int _ballLayer = -1;
+    private static bool _ballLayerCollisionDisabled = false;
 
     void Awake()
     {
@@ -59,21 +86,61 @@ public class PinballBallController : MonoBehaviour
         rb.constraints = RigidbodyConstraints.None;
         rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
 
-        SphereCollider col = GetComponent<SphereCollider>();
-        PhysicsMaterial mat = new PhysicsMaterial("BallPhysics");
-        mat.bounciness = bounciness;
-        mat.dynamicFriction = 0.3f;
-        mat.staticFriction  = 0.3f;
-        mat.frictionCombine  = PhysicsMaterialCombine.Average;
-        mat.bounceCombine    = PhysicsMaterialCombine.Maximum;
-        col.material = mat;
+        sphereCol = GetComponent<SphereCollider>();
+        if (sphereCol.material == null)
+        {
+            PhysicsMaterial mat = new PhysicsMaterial("BallPhysics");
+            mat.bounciness = bounciness;
+            mat.dynamicFriction = 0.3f;
+            mat.staticFriction  = 0.3f;
+            mat.frictionCombine  = PhysicsMaterialCombine.Average;
+            mat.bounceCombine    = PhysicsMaterialCombine.Maximum;
+            sphereCol.material = mat;
+        }
 
-        // 初期値（子ボールではSpawnSplitBallがAwake直後に上書きする）
+        // 初期値（子ボールではSpawnSplitBallがOnEnable後に上書きする）
         _currentXOffset = spawnXOffset;
+
+        SetupBallLayer();
+    }
+
+    /// <summary>
+    /// 自分自身を ballLayerName のレイヤーに割り当て、
+    /// 同レイヤー同士の衝突を一度だけ無効化する。
+    /// </summary>
+    void SetupBallLayer()
+    {
+        if (string.IsNullOrEmpty(ballLayerName)) return;
+
+        if (_ballLayer < 0)
+            _ballLayer = LayerMask.NameToLayer(ballLayerName);
+
+        if (_ballLayer < 0)
+        {
+            Debug.LogWarning($"[PinballBallController] Layer '{ballLayerName}' が見つかりません。Tag/Layer に追加してください。");
+            return;
+        }
+
+        gameObject.layer = _ballLayer;
+
+        if (!_ballLayerCollisionDisabled)
+        {
+            Physics.IgnoreLayerCollision(_ballLayer, _ballLayer, true);
+            _ballLayerCollisionDisabled = true;
+        }
+    }
+
+    void OnEnable()
+    {
+        // プールから再利用された時の初期化
+        _isSplitting = false;
     }
 
     void FixedUpdate()
     {
+        // フレーム開始時に分裂フラグをリセット（次フレームでの衝突を許可）
+        _isSplitting = false;
+
         rb.AddForce(new Vector3(0f, 0f, rb.mass * Mathf.Abs(Physics.gravity.y)), ForceMode.Force);
     }
 
@@ -94,47 +161,93 @@ public class PinballBallController : MonoBehaviour
     {
         yield return new WaitForFixedUpdate();
 
+        int nextGen = _generation + 1;
+
+        // particleGeneration 以降はパーティクルバーストに切り替えて Rigidbody は生成しない
+        if (particleGeneration >= 0 && nextGen >= particleGeneration && splitParticlePrefab != null)
+        {
+            SpawnParticleBurst(posAtCollision);
+            ReturnToPool();
+            yield break;
+        }
+
         int count = Mathf.Max(2, splitCount);
         Vector3 nextScale = transform.localScale * splitScaleRatio;
         Vector3 spawnBase = posAtCollision + Vector3.up * spawnUpOffset;
 
         // -_currentXOffset 〜 +_currentXOffset の範囲に count 個を等間隔配置
-        // 速度も同じ比率で左右に広がる
         for (int i = 0; i < count; i++)
         {
             float t = (count == 1) ? 0f : ((float)i / (count - 1)) * 2f - 1f; // -1 〜 +1
             Vector3 spawnPos = spawnBase + Vector3.right * (_currentXOffset * t);
             Vector3 vel = Vector3.right * (splitSpread * t);
-            SpawnSplitBall(spawnPos, vel, nextScale, splitTargetCollider);
+            SpawnSplitBall(spawnPos, vel, nextScale, splitTargetCollider, nextGen);
         }
 
-        Destroy(gameObject);
+        ReturnToPool();
     }
 
-    void SpawnSplitBall(Vector3 position, Vector3 velocity, Vector3 scale, Collider ignoreCollider)
+    void SpawnSplitBall(Vector3 position, Vector3 velocity, Vector3 scale, Collider ignoreCollider, int generation)
     {
-        GameObject child = Instantiate(gameObject, position, transform.rotation);
+        GameObject child = GetFromPool(position);
         child.transform.localScale = scale;
 
         PinballBallController ctrl = child.GetComponent<PinballBallController>();
         if (ctrl != null)
         {
-            // 次世代のXオフセットは現世代の半分
             ctrl._currentXOffset = _currentXOffset / 2f;
-            // 子ボールは分裂可能（_isSplitting = false のまま）
+            ctrl._generation = generation;
         }
 
         Rigidbody childRb = child.GetComponent<Rigidbody>();
         if (childRb != null)
+        {
             childRb.linearVelocity = velocity;
+            childRb.angularVelocity = Vector3.zero;
+        }
 
-        // 「2」との衝突を一定時間無視
+        // splitTargetTag との衝突を一定時間無視
         Collider childCol = child.GetComponent<Collider>();
         if (childCol != null && ignoreCollider != null)
         {
             Physics.IgnoreCollision(childCol, ignoreCollider, true);
             ctrl?.StartCoroutine(RestoreCollision(childCol, ignoreCollider, ignoreCollisionDuration));
         }
+    }
+
+    void SpawnParticleBurst(Vector3 position)
+    {
+        ParticleSystem ps = Instantiate(splitParticlePrefab, position, Quaternion.identity);
+        ps.Emit(particleBurstCount);
+        // プレハブ側で StopAction = Destroy を設定しておくと自動消滅
+    }
+
+    /// <summary>
+    /// プールから1個取り出す。空ならInstantiateで新規作成。
+    /// </summary>
+    GameObject GetFromPool(Vector3 position)
+    {
+        while (_pool.Count > 0)
+        {
+            GameObject obj = _pool.Pop();
+            if (obj == null) continue; // シーン遷移などで破棄済みの参照はスキップ
+            obj.transform.position = position;
+            obj.transform.rotation = transform.rotation;
+            obj.SetActive(true);
+            return obj;
+        }
+        return Instantiate(gameObject, position, transform.rotation);
+    }
+
+    /// <summary>
+    /// このボールを非アクティブ化してプールへ返す。
+    /// </summary>
+    void ReturnToPool()
+    {
+        rb.linearVelocity = Vector3.zero;
+        rb.angularVelocity = Vector3.zero;
+        gameObject.SetActive(false);
+        _pool.Push(gameObject);
     }
 
     IEnumerator RestoreCollision(Collider col, Collider other, float delay)
