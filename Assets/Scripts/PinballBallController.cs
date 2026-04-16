@@ -66,9 +66,6 @@ public class PinballBallController : MonoBehaviour
 
     void FixedUpdate()
     {
-        // フレーム開始時に分裂フラグをリセット（次フレームでの衝突を許可）
-        _isSplitting = false;
-
         rb.AddForce(new Vector3(0f, 0f, rb.mass * Mathf.Abs(Physics.gravity.y)), ForceMode.Force);
     }
 
