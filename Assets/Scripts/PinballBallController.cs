@@ -58,6 +58,29 @@ public class PinballBallController : MonoBehaviour
     [Tooltip("particleGeneration 以降に使用するパーティクルプレハブ（ParticleSystem 付き）。粒子数や方向はプレハブ側のEmission/Shape/Max Particlesで設定")]
     public ParticleSystem splitParticlePrefab;
 
+    [Header("手動物理設定")]
+    [Tooltip("(particleGeneration - 1) と (particleGeneration - 2) 世代のボールを Rigidbody ではなく手動物理で動かす")]
+    public bool useManualPhysicsForHighGen = true;
+
+    [Tooltip("手動物理ボールが動ける範囲のXmin")]
+    public float manualBoundsXMin = 0.812f;
+
+    [Tooltip("手動物理ボールが動ける範囲のXmax")]
+    public float manualBoundsXMax = 2.425f;
+
+    [Tooltip("手動物理ボールが動ける範囲のYmin（地面）")]
+    public float manualBoundsYMin = 0.008f;
+
+    [Tooltip("手動物理ボールが動ける範囲のZmax（奥側の壁）")]
+    public float manualBoundsZMax = 4.468f;
+
+    [Tooltip("手動物理ボールの跳ね返り係数（0〜1）")]
+    [Range(0f, 1f)]
+    public float manualBounceFactor = 0.6f;
+
+    [Tooltip("手動物理ボールが Splitter を検知する球判定の半径")]
+    public float manualSplitterCheckRadius = 0.05f;
+
     [Header("パーティクル非表示領域")]
     [Tooltip("X座標がこの値以下かつZ座標がhideParticleZMin以上の領域ではパーティクルを生成しない")]
     public float hideParticleXMax = 0.75f;
@@ -73,6 +96,12 @@ public class PinballBallController : MonoBehaviour
 
     // このボールの世代（0=初期、1=1回分裂後、…）
     private int _generation = 0;
+
+    // 手動物理モードフラグ（Rigidbodyを使わず Update で位置・速度を計算）
+    private bool _isManualPhysics = false;
+    private Vector3 _manualVelocity = Vector3.zero;
+    private Collider _ignoredSplitter = null;
+    private float _ignoreSplitterUntil = 0f;
 
     private Rigidbody rb;
     private SphereCollider sphereCol;
@@ -138,6 +167,10 @@ public class PinballBallController : MonoBehaviour
     {
         // プールから再利用された時の初期化
         _isSplitting = false;
+        _isManualPhysics = false;
+        _manualVelocity = Vector3.zero;
+        _ignoredSplitter = null;
+        _ignoreSplitterUntil = 0f;
     }
 
     void FixedUpdate()
@@ -145,12 +178,69 @@ public class PinballBallController : MonoBehaviour
         // フレーム開始時に分裂フラグをリセット（次フレームでの衝突を許可）
         _isSplitting = false;
 
+        if (_isManualPhysics) return;
+
         rb.AddForce(new Vector3(0f, 0f, rb.mass * Mathf.Abs(Physics.gravity.y)), ForceMode.Force);
+    }
+
+    void Update()
+    {
+        if (!_isManualPhysics) return;
+
+        float dt = Time.deltaTime;
+        float gravityMag = Mathf.Abs(Physics.gravity.y);
+
+        // 重力（Y軸負方向）+ Z軸正方向の加速度
+        _manualVelocity.y += Physics.gravity.y * dt;
+        _manualVelocity.z += gravityMag * dt;
+
+        Vector3 pos = transform.position + _manualVelocity * dt;
+
+        // 境界 + 跳ね返り
+        if (pos.x < manualBoundsXMin)
+        {
+            pos.x = manualBoundsXMin;
+            if (_manualVelocity.x < 0f) _manualVelocity.x = -_manualVelocity.x * manualBounceFactor;
+        }
+        else if (pos.x > manualBoundsXMax)
+        {
+            pos.x = manualBoundsXMax;
+            if (_manualVelocity.x > 0f) _manualVelocity.x = -_manualVelocity.x * manualBounceFactor;
+        }
+        if (pos.y < manualBoundsYMin)
+        {
+            pos.y = manualBoundsYMin;
+            if (_manualVelocity.y < 0f) _manualVelocity.y = -_manualVelocity.y * manualBounceFactor;
+        }
+        if (pos.z > manualBoundsZMax)
+        {
+            pos.z = manualBoundsZMax;
+            if (_manualVelocity.z > 0f) _manualVelocity.z = -_manualVelocity.z * manualBounceFactor;
+        }
+
+        transform.position = pos;
+
+        // Splitter 検知
+        if (_isSplitting) return;
+
+        Collider[] hits = Physics.OverlapSphere(pos, manualSplitterCheckRadius);
+        for (int i = 0; i < hits.Length; i++)
+        {
+            Collider hit = hits[i];
+            if (hit == null) continue;
+            if (hit == _ignoredSplitter && Time.time < _ignoreSplitterUntil) continue;
+            if (!hit.CompareTag(splitTargetTag)) continue;
+
+            _isSplitting = true;
+            StartCoroutine(SplitNextFrame(pos, hit));
+            break;
+        }
     }
 
     void OnCollisionEnter(Collision collision)
     {
         if (_isSplitting) return;
+        if (_isManualPhysics) return;
         if (!collision.gameObject.CompareTag(splitTargetTag)) return;
 
         _isSplitting = true;
@@ -159,6 +249,50 @@ public class PinballBallController : MonoBehaviour
         Vector3 posAtCollision = transform.position;
 
         StartCoroutine(SplitNextFrame(posAtCollision, collision.collider));
+    }
+
+    /// <summary>
+    /// 世代に応じて Rigidbody / 手動物理の切り替えと初期速度・無視Splitter設定をまとめて行う。
+    /// </summary>
+    public void ConfigurePhysicsMode(Vector3 initialVelocity, Collider ignoreSplitter, int generation)
+    {
+        _generation = generation;
+
+        bool useManual = useManualPhysicsForHighGen
+                      && particleGeneration > 0
+                      && (generation == particleGeneration - 1 || generation == particleGeneration - 2);
+
+        _isManualPhysics = useManual;
+
+        if (useManual)
+        {
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+            rb.isKinematic = true;
+            rb.useGravity = false;
+
+            _manualVelocity = initialVelocity;
+            _ignoredSplitter = ignoreSplitter;
+            _ignoreSplitterUntil = Time.time + ignoreCollisionDuration;
+        }
+        else
+        {
+            rb.isKinematic = false;
+            rb.useGravity = true;
+            rb.linearVelocity = initialVelocity;
+            rb.angularVelocity = Vector3.zero;
+
+            _ignoredSplitter = null;
+            _ignoreSplitterUntil = 0f;
+
+            // 通常Rigidbodyモードでは Splitter 物理衝突を一定時間無視
+            Collider childCol = GetComponent<Collider>();
+            if (childCol != null && ignoreSplitter != null)
+            {
+                Physics.IgnoreCollision(childCol, ignoreSplitter, true);
+                StartCoroutine(RestoreCollision(childCol, ignoreSplitter, ignoreCollisionDuration));
+            }
+        }
     }
 
     IEnumerator SplitNextFrame(Vector3 posAtCollision, Collider splitTargetCollider)
@@ -200,22 +334,7 @@ public class PinballBallController : MonoBehaviour
         if (ctrl != null)
         {
             ctrl._currentXOffset = _currentXOffset / 2f;
-            ctrl._generation = generation;
-        }
-
-        Rigidbody childRb = child.GetComponent<Rigidbody>();
-        if (childRb != null)
-        {
-            childRb.linearVelocity = velocity;
-            childRb.angularVelocity = Vector3.zero;
-        }
-
-        // splitTargetTag との衝突を一定時間無視
-        Collider childCol = child.GetComponent<Collider>();
-        if (childCol != null && ignoreCollider != null)
-        {
-            Physics.IgnoreCollision(childCol, ignoreCollider, true);
-            ctrl?.StartCoroutine(RestoreCollision(childCol, ignoreCollider, ignoreCollisionDuration));
+            ctrl.ConfigurePhysicsMode(velocity, ignoreCollider, generation);
         }
     }
 
@@ -260,8 +379,15 @@ public class PinballBallController : MonoBehaviour
     /// </summary>
     void ReturnToPool()
     {
+        // 手動物理モードのままだと kinematic Rigidbody への velocity 代入で警告が出るため通常モードへ戻す
+        rb.isKinematic = false;
+        rb.useGravity = true;
         rb.linearVelocity = Vector3.zero;
         rb.angularVelocity = Vector3.zero;
+
+        _isManualPhysics = false;
+        _manualVelocity = Vector3.zero;
+
         gameObject.SetActive(false);
         _pool.Push(gameObject);
     }
