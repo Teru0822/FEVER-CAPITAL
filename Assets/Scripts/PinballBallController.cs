@@ -82,9 +82,6 @@ public class PinballBallController : MonoBehaviour
     private static int _ballLayer = -1;
     private static bool _ballLayerCollisionDisabled = false;
 
-    // 全Pinballボールのコライダー集合（last-gen ball の pairwise IgnoreCollision 用）
-    private static HashSet<Collider> _allBallColliders = new HashSet<Collider>();
-
     void Awake()
     {
         rb = GetComponent<Rigidbody>();
@@ -141,37 +138,6 @@ public class PinballBallController : MonoBehaviour
     {
         // プールから再利用された時の初期化
         _isSplitting = false;
-
-        // 全ボール集合に登録
-        if (sphereCol != null)
-            _allBallColliders.Add(sphereCol);
-    }
-
-    void OnDisable()
-    {
-        if (sphereCol != null)
-            _allBallColliders.Remove(sphereCol);
-    }
-
-    /// <summary>
-    /// 自分が (particleGeneration - 1) 以降の世代なら、軽量化処理を適用する。
-    /// - Rigidbody.collisionDetectionMode を Discrete に
-    /// - 他の全Pinballボールとの衝突を Physics.IgnoreCollision で明示的に無効化
-    ///   （Layer Collision Matrix が未設定でもボール同士の衝突を確実に撤廃）
-    /// </summary>
-    public void ApplyGenerationOptimizations()
-    {
-        if (particleGeneration < 0 || _generation < particleGeneration - 1) return;
-
-        if (rb != null)
-            rb.collisionDetectionMode = CollisionDetectionMode.Discrete;
-
-        if (sphereCol == null) return;
-        foreach (Collider other in _allBallColliders)
-        {
-            if (other != null && other != sphereCol)
-                Physics.IgnoreCollision(sphereCol, other, true);
-        }
     }
 
     void FixedUpdate()
@@ -235,7 +201,6 @@ public class PinballBallController : MonoBehaviour
         {
             ctrl._currentXOffset = _currentXOffset / 2f;
             ctrl._generation = generation;
-            ctrl.ApplyGenerationOptimizations();
         }
 
         Rigidbody childRb = child.GetComponent<Rigidbody>();
