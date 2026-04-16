@@ -55,11 +55,8 @@ public class PinballBallController : MonoBehaviour
     [Tooltip("この世代以降は Rigidbody ボールではなく ParticleSystem で表現する（負の値で無効）")]
     public int particleGeneration = 4;
 
-    [Tooltip("particleGeneration 以降に使用するパーティクルプレハブ（ParticleSystem 付き）")]
+    [Tooltip("particleGeneration 以降に使用するパーティクルプレハブ（ParticleSystem 付き）。粒子数や方向はプレハブ側のEmission/Shape/Max Particlesで設定")]
     public ParticleSystem splitParticlePrefab;
-
-    [Tooltip("パーティクルバースト1回あたりの粒子数")]
-    public int particleBurstCount = 30;
 
     // 実際にこのボールが分裂するときのXオフセット（世代ごとに半減）
     private float _currentXOffset;
@@ -219,7 +216,8 @@ public class PinballBallController : MonoBehaviour
     {
         // プレハブの回転を引き継ぐ（Shape モジュールの方向設定を活かすため）
         ParticleSystem ps = Instantiate(splitParticlePrefab, position, splitParticlePrefab.transform.rotation);
-        ps.Emit(particleBurstCount);
+        // プレハブ側の Emission / Max Particles / Bursts 設定を尊重する
+        ps.Play();
         // プレハブ側で StopAction = Destroy を設定しておくと自動消滅
     }
 
