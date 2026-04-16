@@ -20,14 +20,19 @@ public class LeverController : MonoBehaviour
     [Tooltip("離したときに中央へ戻る速さ")]
     public float returnSpeed = 8f;
 
+    [Tooltip("操作時の重さ（慣性）。小さいほど重く・遅れて動き、大きいほど軽く・キビキビ動きます")]
+    public float weightDamping = 10f;
+
     [Header("方向反転（見た目が逆の場合にチェック）")]
     public bool invertHorizontal = false;
     public bool invertVertical   = false;
 
     // 内部状態
     private bool       _isDragging      = false;
-    private float      _angleH          = 0f;   // マウスX方向の累積角度
-    private float      _angleV          = 0f;   // マウスY方向の累積角度
+    private float      _targetAngleH    = 0f;   // マウス入力による目標角度
+    private float      _targetAngleV    = 0f;
+    private float      _angleH          = 0f;   // 実際の現在の角度（Lerpで追従）
+    private float      _angleV          = 0f;
     private Quaternion _initialWorldRot;         // レバーの初期ワールド回転
     private Vector3    _leverInitialUp;          // レバー棒の初期ワールド上方向
     private Collider   _collider;
@@ -56,51 +61,55 @@ public class LeverController : MonoBehaviour
             float dirH = invertHorizontal ? -1f : 1f;
             float dirV = invertVertical   ? -1f : 1f;
 
-            _angleH += delta.x * dirH * sensitivity * Time.deltaTime;
-            _angleV += delta.y * dirV * sensitivity * Time.deltaTime;
-            _angleH  = Mathf.Clamp(_angleH, -leverMaxAngle, leverMaxAngle);
-            _angleV  = Mathf.Clamp(_angleV, -leverMaxAngle, leverMaxAngle);
+            _targetAngleH += delta.x * dirH * sensitivity * Time.deltaTime;
+            _targetAngleV += delta.y * dirV * sensitivity * Time.deltaTime;
+            _targetAngleH  = Mathf.Clamp(_targetAngleH, -leverMaxAngle, leverMaxAngle);
+            _targetAngleV  = Mathf.Clamp(_targetAngleV, -leverMaxAngle, leverMaxAngle);
         }
         else
         {
-            _angleH = Mathf.Lerp(_angleH, 0f, Time.deltaTime * returnSpeed);
-            _angleV = Mathf.Lerp(_angleV, 0f, Time.deltaTime * returnSpeed);
+            // 手を離したら目標角度を0（中央）に戻す
+            _targetAngleH = 0f;
+            _targetAngleV = 0f;
         }
+
+        // 常にLerpで追従させることで、手ごたえ（重さ・慣性）を表現
+        float damping = _isDragging ? weightDamping : returnSpeed;
+        _angleH = Mathf.Lerp(_angleH, _targetAngleH, Time.deltaTime * damping);
+        _angleV = Mathf.Lerp(_angleV, _targetAngleV, Time.deltaTime * damping);
 
         ApplyLeverRotation();
         UpdateArmInput();
     }
 
-    /// <summary>
-    /// レバーの回転を適用。
-    /// マウスの (dx, dy) を画面空間の傾き方向として解釈し、
-    /// レバーをその方向へ単一軸で傾ける。複数軸合成による歪みがない。
-    /// </summary>
     void ApplyLeverRotation()
     {
         if (Camera.main == null) return;
         var cam = Camera.main.transform;
 
-        // カメラのスクリーン空間の右/上方向（ワールド座標）
-        Vector3 screenRight = cam.right;
-        Vector3 screenUp    = cam.up;
+        // 【修正ポイント1】カメラの描画空間ではなく、フィールド上の「右」と「奥」を取得（アーム移動と同じ基準）
+        Vector3 camXZRight   = Vector3.ProjectOnPlane(cam.right,   Vector3.up).normalized;
+        Vector3 camXZForward = Vector3.ProjectOnPlane(cam.forward, Vector3.up).normalized;
 
-        // マウスの (H, V) から画面上の「傾き方向」ベクトルを生成
-        Vector3 tiltDir   = screenRight * _angleH + screenUp * _angleV;
-        float   tiltAngle = tiltDir.magnitude;
+        float normH = _angleH / leverMaxAngle;
+        float normV = _angleV / leverMaxAngle;
 
-        if (tiltAngle < 0.001f)
+        // レバーを倒したいワールド空間上の向き（XZ平面上のベクトル）
+        Vector3 moveDir = camXZRight * normH + camXZForward * normV;
+        
+        float tiltMagnitude = new Vector2(_angleH, _angleV).magnitude;
+        if (tiltMagnitude < 0.001f || moveDir.sqrMagnitude < 0.001f)
         {
             // 完全に中立: 初期回転に戻す
             ApplyWorldRotation(_initialWorldRot);
             return;
         }
 
-        tiltDir   = tiltDir.normalized;
-        tiltAngle = Mathf.Min(tiltAngle, leverMaxAngle);
-
-        // 回転軸 = レバーの軸 × 傾き方向（どちら向きに倒すかを決定）
-        Vector3    rotAxis       = Vector3.Cross(_leverInitialUp, tiltDir).normalized;
+        // 【修正ポイント2】FBXのローカル軸（_leverInitialUp）がズレているとコマ回転してしまうため、
+        // どんなFBXモデルでも常に純粋なワールドの真上(Vector3.up)を直交計算の基準にして、倒れる回転軸を作ります
+        Vector3 rotAxis = Vector3.Cross(Vector3.up, moveDir.normalized).normalized;
+        
+        float tiltAngle = Mathf.Min(tiltMagnitude, leverMaxAngle);
         Quaternion additionalRot = Quaternion.AngleAxis(tiltAngle, rotAxis);
         Quaternion targetWorld   = additionalRot * _initialWorldRot;
 
