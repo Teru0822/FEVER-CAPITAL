@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 /// <summary>
 /// ピンボールのプランジャー（「4」オブジェクト）制御スクリプト。
@@ -74,7 +75,7 @@ public class PinballPlungerController : MonoBehaviour
     {
         float currentZ = rb.position.z;
 
-        if (Input.GetKey(KeyCode.Space))
+        if (Keyboard.current != null && Keyboard.current.spaceKey.isPressed)
         {
             // SPACEキー押下中：Z軸正方向へ引っ張る
             if (currentZ < maxZ)
