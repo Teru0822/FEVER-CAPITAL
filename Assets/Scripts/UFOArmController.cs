@@ -125,19 +125,19 @@ public class UFOArmController : MonoBehaviour
     {
         if (armRoot == null) return;
 
-        // Rail1（縦）: Z位置をアームに合わせる（X・Yは変えない）
+        // Rail1: 左右（X方向）移動をアームに合わせる
         if (rail1 != null)
         {
             Vector3 p = rail1.position;
-            p.z = armRoot.position.z;
+            p.x = armRoot.position.x;
             rail1.position = p;
         }
 
-        // Rail2（横）: X位置をアームに合わせる
+        // Rail2: 上下・奥手前（Z方向）移動をアームに合わせる
         if (rail2 != null)
         {
             Vector3 p = rail2.position;
-            p.x = armRoot.position.x;
+            p.z = armRoot.position.z;
             rail2.position = p;
         }
     }
