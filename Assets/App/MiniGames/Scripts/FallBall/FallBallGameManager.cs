@@ -18,9 +18,10 @@ namespace MiniGames.FallBall
         [Header("References")]
         [Tooltip("棒の操作コントローラー")]
         [SerializeField] private BarController barController;
-        [Tooltip("落下させる鉄球のRigidbody")]
-        [SerializeField] private Rigidbody ballRigidbody;
+        [Tooltip("落下させる鉄球のGameObject")]
+        [SerializeField] private GameObject ballObject;
         
+        private Rigidbody ballRigidbody;
         private int currentBet;
         private bool isFinished = false;
 
@@ -28,6 +29,11 @@ namespace MiniGames.FallBall
         {
             currentBet = betAmount;
             isFinished = false;
+            
+            if (ballObject != null)
+            {
+                ballRigidbody = ballObject.GetComponent<Rigidbody>();
+            }
             
             // 操作を一旦無効化して物理挙動も止めておく
             if (barController != null) barController.SetActive(false);
