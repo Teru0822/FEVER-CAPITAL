@@ -66,18 +66,34 @@ public class UFOArmController : MonoBehaviour
     public Transform[] extraSwayParts;
     private Quaternion[] _extraSwayDefaultRot;
 
-    [Tooltip("揺れの強さ（感度）")]
-    public float swaySensitivity = 2f;
-    [Tooltip("揺れが静まるまでの時間（ダンピング）")]
-    public float swayDamping = 3f;
-    [Tooltip("振り子の戻る力（バネの強さ）")]
-    public float swaySpringForce = 15f;
+    [Header("ロープの揺れ設定（Extra Sway Parts用）")]
+    public float extraSwaySensitivity = 2f;
+    public float extraSwayDamping = 3f;
+    public float extraSwaySpringForce = 15f;
+
+    [Header("爪の揺れ設定（Finger Parts用）")]
+    [Tooltip("爪の土台（finger）など、開閉アニメはないが爪と同じ強さで揺れてほしいパーツ")]
+    public Transform[] clawBaseParts;
+    private Quaternion[] _clawBaseDefaultRot;
+
+    [UnityEngine.Serialization.FormerlySerializedAs("swaySensitivity")]
+    public float clawSwaySensitivity = 2f;
+    [UnityEngine.Serialization.FormerlySerializedAs("swayDamping")]
+    public float clawSwayDamping = 3f;
+    [UnityEngine.Serialization.FormerlySerializedAs("swaySpringForce")]
+    public float clawSwaySpringForce = 15f;
 
     private Vector3 _lastWorldPos;
-    private Vector3 _velocity;
-    private Vector3 _swayAngle;
-    private Vector3 _swayVelocity;
-    public Quaternion currentSwayRot { get; private set; } = Quaternion.identity;
+    
+    // Extra Sway State
+    private Vector3 _ropeSwayAngle;
+    private Vector3 _ropeSwayVelocity;
+    public Quaternion ropeSwayRot { get; private set; } = Quaternion.identity;
+
+    // Claw Sway State
+    private Vector3 _clawSwayAngle;
+    private Vector3 _clawSwayVelocity;
+    public Quaternion clawSwayRot { get; private set; } = Quaternion.identity;
 
     // ─────────────────────────────────────
     void Start()
@@ -115,6 +131,17 @@ public class UFOArmController : MonoBehaviour
             {
                 if (extraSwayParts[i] != null)
                     _extraSwayDefaultRot[i] = extraSwayParts[i].localRotation;
+            }
+        }
+
+        // 爪土台の初期回転を記録
+        if (clawBaseParts != null && clawBaseParts.Length > 0)
+        {
+            _clawBaseDefaultRot = new Quaternion[clawBaseParts.Length];
+            for (int i = 0; i < clawBaseParts.Length; i++)
+            {
+                if (clawBaseParts[i] != null)
+                    _clawBaseDefaultRot[i] = clawBaseParts[i].localRotation;
             }
         }
 
@@ -186,23 +213,25 @@ public class UFOArmController : MonoBehaviour
         Vector3 currentVel = (currentPos - _lastWorldPos) / Time.deltaTime;
         _lastWorldPos = currentPos;
 
-        // 【移動ベースの揺れ】
-        // アームが移動している時、空気抵抗や慣性のように「移動方向と逆」に傾かせる目標角度
-        Vector3 targetSway = new Vector3(currentVel.z, 0f, -currentVel.x) * swaySensitivity;
+        // 【ロープ（Extra）側の揺れ計算】
+        Vector3 ropeTargetSway = new Vector3(currentVel.z, 0f, currentVel.x) * extraSwaySensitivity;
+        Vector3 ropeAngleDiff = ropeTargetSway - _ropeSwayAngle;
+        Vector3 ropeSpringAccel = (ropeAngleDiff * extraSwaySpringForce) - (_ropeSwayVelocity * extraSwayDamping);
+        _ropeSwayVelocity += ropeSpringAccel * Time.deltaTime;
+        _ropeSwayAngle += _ropeSwayVelocity * Time.deltaTime;
+        _ropeSwayAngle.x = Mathf.Clamp(_ropeSwayAngle.x, -50f, 50f);
+        _ropeSwayAngle.z = Mathf.Clamp(_ropeSwayAngle.z, -50f, 50f);
+        ropeSwayRot = Quaternion.Euler(_ropeSwayAngle.x, 0f, _ropeSwayAngle.z);
 
-        // 【バネ（スプリング）の単振動シミュレーション】
-        // 常に targetSway に向かって引っ張られ、行き過ぎて揺れる
-        Vector3 angleDiff = targetSway - _swayAngle;
-        Vector3 springAccel = (angleDiff * swaySpringForce) - (_swayVelocity * swayDamping);
-
-        _swayVelocity += springAccel * Time.deltaTime;
-        _swayAngle += _swayVelocity * Time.deltaTime;
-
-        // 暴れすぎないように最大角度を制限
-        _swayAngle.x = Mathf.Clamp(_swayAngle.x, -50f, 50f);
-        _swayAngle.z = Mathf.Clamp(_swayAngle.z, -50f, 50f);
-
-        currentSwayRot = Quaternion.Euler(_swayAngle.x, 0f, _swayAngle.z);
+        // 【爪（Claw）側の揺れ計算】
+        Vector3 clawTargetSway = new Vector3(currentVel.z, 0f, currentVel.x) * clawSwaySensitivity;
+        Vector3 clawAngleDiff = clawTargetSway - _clawSwayAngle;
+        Vector3 clawSpringAccel = (clawAngleDiff * clawSwaySpringForce) - (_clawSwayVelocity * clawSwayDamping);
+        _clawSwayVelocity += clawSpringAccel * Time.deltaTime;
+        _clawSwayAngle += _clawSwayVelocity * Time.deltaTime;
+        _clawSwayAngle.x = Mathf.Clamp(_clawSwayAngle.x, -50f, 50f);
+        _clawSwayAngle.z = Mathf.Clamp(_clawSwayAngle.z, -50f, 50f);
+        clawSwayRot = Quaternion.Euler(_clawSwayAngle.x, 0f, _clawSwayAngle.z);
     }
 
     void UpdateRailFollow()
@@ -235,22 +264,59 @@ public class UFOArmController : MonoBehaviour
             {
                 if (fingerParts[i] == null) continue;
 
-                // 開閉アニメーションの補間（揺れを含まないピュアな状態）
+                // 開閉アニメーションの補間（純粹なローカル状態）
                 Quaternion targetBaseRot = _wantFingerOpen ? _fingerOpenRot[i] : _fingerDefaultRot[i];
                 _fingerCurrentBaseRot[i] = Quaternion.Lerp(_fingerCurrentBaseRot[i], targetBaseRot, Time.deltaTime * fingerSpeed);
 
-                // ピュアな開閉状態に、物理的な揺れ（Sway）を合成してセット
-                fingerParts[i].localRotation = currentSwayRot * _fingerCurrentBaseRot[i];
+                // 1. 純粋なローカル回転（開閉）のみをセットする。
+                // 1. 純粋なローカル回転（開閉）をセット
+                fingerParts[i].localRotation = _fingerCurrentBaseRot[i];
+                // 2. 爪用の個別揺れを適用
+                fingerParts[i].rotation = clawSwayRot * fingerParts[i].rotation;
             }
         }
 
-        // その他（6番ロープなど）に対する揺れの適用
+        // 爪土台に対する揺れの適用（Claw設定）
+        if (clawBaseParts != null && clawBaseParts.Length > 0)
+        {
+            for (int i = 0; i < clawBaseParts.Length; i++)
+            {
+                if (clawBaseParts[i] == null) continue;
+                clawBaseParts[i].localRotation = _clawBaseDefaultRot[i];
+                clawBaseParts[i].rotation = clawSwayRot * clawBaseParts[i].rotation;
+            }
+        }
+
+        // その他（6番ロープなど）に対する揺れの適用（Extra設定）
         if (extraSwayParts != null && extraSwayParts.Length > 0)
         {
             for (int i = 0; i < extraSwayParts.Length; i++)
             {
                 if (extraSwayParts[i] == null) continue;
-                extraSwayParts[i].localRotation = currentSwayRot * _extraSwayDefaultRot[i];
+
+                // 1. 本来のローカル回転をセット
+                extraSwayParts[i].localRotation = _extraSwayDefaultRot[i];
+                // 2. ロープ用の個別揺れを適用
+                extraSwayParts[i].rotation = ropeSwayRot * extraSwayParts[i].rotation;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 当たり判定スクリプト（UFOClawCollisionDetector）から「何かにぶつかった」時に呼ばれる
+    /// </summary>
+    public void OnClawCollided()
+    {
+        // 下降中に景品や床にぶつかったら、最大まで伸びきるのを待たずに強制的に「掴む＆上昇」へ移行する
+        if (_state == ArmState.Descending)
+        {
+            _state = ArmState.Grabbing;
+            _wantFingerOpen = false;
+            _stateTimer = grabWaitSeconds; // 少し待ってから上昇する
+            
+            if (stretchRope != null)
+            {
+                stretchRope.StartExternalAscent(descentSpeedMultiplier);
             }
         }
     }

@@ -138,25 +138,33 @@ public class StretchRope : MonoBehaviour
         }
         transform.localScale = newScale;
 
-        // ── ロープ本体の位置（中心補正） ──
+        // ── 回転による振り子運動のための準備 ──
+        UFOArmController arm = FindAnyObjectByType<UFOArmController>();
+        Quaternion ropeSwayRot = (arm != null) ? arm.ropeSwayRot : Quaternion.identity;
+        Quaternion clawSwayRot = (arm != null) ? arm.clawSwayRot : Quaternion.identity;
+        
+        // ロープの根本（クレーン本体の中心）をすべての揺れの「共通の支点（Pivot）」として扱う
+        Vector3 universalPivot = (arm != null && arm.armRoot != null) ? arm.armRoot.position : transform.position;
+
+        // ── ロープ本体の位置（中心補正＋Sway位置反映） ──
         if (moveAxis != Axis.None)
         {
             float   dir    = moveNegative ? -1f : 1f;
             float   move   = scaleAdd * moveRatio;
             
-            // 親が動いた（横移動した）分を加味した現在の「本来あるべきワールド座標」を算出
+            // 親が動いた（横移動した）分を加味した現在の「本来あるべきワールド座標（揺れなし）」
             Vector3 baseWorldPos = (transform.parent != null) 
                                  ? transform.parent.TransformPoint(_originalPosition) 
                                  : _originalPosition;
 
-            // アームの親パーツが回転（Blenderなどによる-90度等）していても、必ず「ワールド軸」で真っ直ぐ動かす
-            switch (moveAxis)
-            {
-                case Axis.X: baseWorldPos.x += move * dir; break;
-                case Axis.Y: baseWorldPos.y += move * dir; break;
-                case Axis.Z: baseWorldPos.z += move * dir; break;
-            }
-            transform.position = baseWorldPos;
+            // どんなモデルの作りの向きであっても、重力に従って絶対に「ワールドの真下（Y軸マイナス方向）」に向かって落下・縮合させる
+            baseWorldPos.y -= Mathf.Abs(move);
+
+            // 支点から「真っ直ぐ下」へのベクトルを作り、揺れ角度で円を描くように振る
+            Vector3 downwardVec = baseWorldPos - universalPivot;
+            Vector3 swayedVec = ropeSwayRot * downwardVec;
+
+            transform.position = universalPivot + swayedVec;
         }
 
         // ── finger等の追従（Sway位置反映） ──
@@ -164,13 +172,6 @@ public class StretchRope : MonoBehaviour
         {
             float dir     = moveNegative ? -1f : 1f;
             float moveAdd = scaleAdd * fingerRatio * dir;
-
-            // 回転による振り子運動の位置ズレを反映するため、UFOArmController から今の揺れ角度をもらう
-            UFOArmController arm = FindAnyObjectByType<UFOArmController>();
-            Quaternion swayRot = (arm != null) ? arm.currentSwayRot : Quaternion.identity;
-
-            // ロープの根本（ここが振り子の支点になる）
-            Vector3 pivotWorldPos = transform.position;
 
             for (int i = 0; i < attachedObjects.Length; i++)
             {
@@ -181,21 +182,16 @@ public class StretchRope : MonoBehaviour
                                      ? attachedObjects[i].parent.TransformPoint(_originalAttachedLocalPos[i])
                                      : _originalAttachedLocalPos[i];
 
-                switch (moveAxis)
-                {
-                    case Axis.X: baseWorldPos.x += moveAdd; break;
-                    case Axis.Y: baseWorldPos.y += moveAdd; break;
-                    case Axis.Z: baseWorldPos.z += moveAdd; break;
-                }
+                // 爪の本体のY座標（高さ）を強制的にロープと同じ距離だけ下に落とす
+                baseWorldPos.y -= Mathf.Abs(moveAdd);
 
-                // 支点から、爪の「真下座標」までのベクトル（真っ直ぐなロープ）
-                Vector3 downwardVec = baseWorldPos - pivotWorldPos;
-                
-                // それを揺れ角度で回転させる（振り子のように円を描いてスイングする）
-                Vector3 swayedVec = swayRot * downwardVec;
+                // ロープ本体と完全に同じ支点・同じ揺れ角度（ropeSwayRot）を使って位置をスイングさせる！
+                // これにより、6番が右に動けば絶対に爪も右に動く（絶対に分離しない）ようになる
+                Vector3 downwardVec = baseWorldPos - universalPivot;
+                Vector3 swayedVec = ropeSwayRot * downwardVec;
 
                 // 最終的なワールド座標を更新
-                attachedObjects[i].position = pivotWorldPos + swayedVec;
+                attachedObjects[i].position = universalPivot + swayedVec;
             }
         }
     }
