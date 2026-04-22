@@ -44,6 +44,17 @@ public class PinballBallConfig : MonoBehaviour
     [Tooltip("右上からの余白 (px)")]
     public Vector2 moneyPadding = new Vector2(20, 16);
 
+    [Header("所持金ポップ演出")]
+    [Tooltip("この金額を跨ぐたびに「どぅん！」とスケールアップする閾値")]
+    public int moneyPopThreshold = 100000;
+
+    [Tooltip("ポップ時の最大スケール倍率")]
+    [Range(1f, 3f)]
+    public float moneyPopScale = 1.6f;
+
+    [Tooltip("ポップ演出の長さ (秒)")]
+    public float moneyPopDuration = 0.35f;
+
     [Header("リセット")]
     [Tooltip("このキーを押すと現在のシーンを再ロードしてゲームを初期化する")]
     public KeyCode resetKey = KeyCode.R;

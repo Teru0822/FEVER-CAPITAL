@@ -25,6 +25,10 @@ public class PinballBallManager : MonoBehaviour
     private GUIStyle _moneyStyle;
     private float _nextLogTime = 0f;
 
+    // 所持金ポップ演出
+    private long _lastMoneyPopStep = 0;
+    private float _popStartTime = -999f;
+
     private static PinballBallManager _instance;
     public static PinballBallManager Instance
     {
@@ -114,6 +118,16 @@ public class PinballBallManager : MonoBehaviour
     {
         // この時点でシーン上の gen 0 は OnEnable 済み。初期個数を累積カウンタの起点にする。
         _totalGenerated = PinballBallController.AliveGen0Count;
+        // 開始時の所持金ではポップさせない (現ステップを起点に設定)
+        _lastMoneyPopStep = CurrentMoneyStep();
+    }
+
+    long CurrentMoneyStep()
+    {
+        if (_config == null) return 0;
+        long money = (long)_totalGenerated * _config.moneyPerBall;
+        int thr = Mathf.Max(1, _config.moneyPopThreshold);
+        return money / thr;
     }
 
     void ResolveConfig()
@@ -397,6 +411,14 @@ public class PinballBallManager : MonoBehaviour
             _config.debugManagedCount = managed;
             _config.debugTotalCount = total;
             _config.debugTotalGenerated = _totalGenerated;
+
+            // 所持金ポップ判定: ステップが 1 つ以上進んだら演出開始
+            long step = CurrentMoneyStep();
+            if (step > _lastMoneyPopStep)
+            {
+                _lastMoneyPopStep = step;
+                _popStartTime = Time.unscaledTime;
+            }
         }
 
         if (_config == null || !_config.logBallCount) return;
@@ -469,6 +491,28 @@ public class PinballBallManager : MonoBehaviour
         float height = size.y + 8f;
         Rect rect = new Rect(Screen.width - width - _config.moneyPadding.x, _config.moneyPadding.y, width, height);
 
+        // ポップ演出: 経過時間に応じて ease-out で 1.0 → (1 + bonus) → 1.0 に戻る
+        float scale = 1f;
+        float duration = Mathf.Max(0.01f, _config.moneyPopDuration);
+        float elapsed = Time.unscaledTime - _popStartTime;
+        if (elapsed >= 0f && elapsed < duration)
+        {
+            float t = elapsed / duration;
+            // 立ち上がりをすばやく (0→0.15) → ゆっくり減衰 させるため二段構え
+            float rise = Mathf.Clamp01(t / 0.15f);
+            float fall = Mathf.Pow(1f - Mathf.Clamp01((t - 0.15f) / 0.85f), 2f);
+            float curve = (t < 0.15f) ? rise : fall;
+            scale = 1f + (_config.moneyPopScale - 1f) * curve;
+        }
+
+        // 右上を基準にスケール (画面外に出ないよう右端をピボットに)
+        Matrix4x4 prevMatrix = GUI.matrix;
+        if (!Mathf.Approximately(scale, 1f))
+        {
+            Vector2 pivot = new Vector2(rect.xMax, rect.y);
+            GUIUtility.ScaleAroundPivot(new Vector2(scale, scale), pivot);
+        }
+
         // 影 (視認性向上) — フォントサイズに比例してオフセットを調整
         float shadow = Mathf.Max(2f, fontSize * 0.05f);
         var prevColor = GUI.color;
@@ -477,6 +521,8 @@ public class PinballBallManager : MonoBehaviour
         GUI.color = prevColor;
 
         GUI.Label(rect, text, _moneyStyle);
+
+        GUI.matrix = prevMatrix;
     }
 
     void SpawnChildrenAndDestroy(int index)
