@@ -16,63 +16,13 @@ using UnityEngine.InputSystem;
 /// </summary>
 public class PinballBallManager : MonoBehaviour
 {
-    [Tooltip("NativeList 初期容量")]
-    public int initialCapacity = 256;
-
-    [Header("ボール同士の衝突応答")]
-    [Tooltip("法線方向の反発係数 (0 = 完全非弾性, 0.2 前後で落ち着いた挙動)")]
-    [Range(0f, 1f)]
-    public float ballBallRestitution = 0.1f;
-
-    [Tooltip("この量までの重なりは位置補正しない (ジッタ防止の接触スラック)")]
-    public float ballBallPositionSlop = 0.005f;
-
-    [Tooltip("位置補正の緩和係数 (1 = 即時解消で振動しやすい。0.2〜0.5 推奨)")]
-    [Range(0.05f, 1f)]
-    public float ballBallPositionCorrection = 0.2f;
-
-    [Header("所持金 UI")]
-    [Tooltip("ボール 1 個あたりの金額")]
-    public int moneyPerBall = 100;
-
-    [Tooltip("表示ラベルの接頭辞")]
-    public string moneyLabelPrefix = "所持金：";
-
-    [Tooltip("表示ラベルの接尾辞（円、G、pt など）")]
-    public string moneyLabelSuffix = "";
-
-    [Tooltip("所持金ラベルを表示するか")]
-    public bool showMoneyLabel = true;
-
-    [Tooltip("フォントサイズ")]
-    public int moneyFontSize = 32;
-
-    [Tooltip("文字色")]
-    public Color moneyColor = Color.white;
-
-    [Tooltip("右上からの余白 (px)")]
-    public Vector2 moneyPadding = new Vector2(20, 16);
+    // ---- 全 Inspector 項目は PinballBallConfig に分離 ----
+    // シーンに PinballBallConfig をアタッチすれば Manager が起動時に参照する。
+    // 見つからない場合はデフォルト値で動作。
+    private PinballBallConfig _config;
 
     private int _totalGenerated = 0;
     private GUIStyle _moneyStyle;
-
-    [Header("リセット")]
-    [Tooltip("このキーを押すと現在のシーンを再ロードしてゲームを初期化する")]
-    public KeyCode resetKey = KeyCode.R;
-
-    [Header("デバッグ")]
-    [Tooltip("現在のボール総数 (gen 0 + gen ≥ 1) を Console にログ出力する")]
-    public bool logBallCount = true;
-
-    [Tooltip("ログ出力間隔 (秒)")]
-    public float logInterval = 0.5f;
-
-    [Tooltip("実行時の gen ≥ 1 数 (読み取り専用表示)")]
-    public int debugManagedCount;
-
-    [Tooltip("実行時の総数 (gen 0 + gen ≥ 1) (読み取り専用表示)")]
-    public int debugTotalCount;
-
     private float _nextLogTime = 0f;
 
     private static PinballBallManager _instance;
@@ -156,6 +106,7 @@ public class PinballBallManager : MonoBehaviour
     {
         if (_instance != null && _instance != this) { Destroy(gameObject); return; }
         _instance = this;
+        ResolveConfig();
         Initialize();
     }
 
@@ -165,19 +116,32 @@ public class PinballBallManager : MonoBehaviour
         _totalGenerated = PinballBallController.AliveGen0Count;
     }
 
+    void ResolveConfig()
+    {
+        _config = FindFirstObjectByType<PinballBallConfig>();
+        if (_config == null)
+        {
+            // 見つからなければデフォルト値の一時 Config を生成
+            var go = new GameObject("[PinballBallConfigDefault]");
+            go.hideFlags = HideFlags.HideAndDontSave;
+            _config = go.AddComponent<PinballBallConfig>();
+        }
+    }
+
     void Initialize()
     {
         if (_initialized) return;
-        _positions = new NativeList<float3>(initialCapacity, Allocator.Persistent);
-        _velocities = new NativeList<float3>(initialCapacity, Allocator.Persistent);
-        _radii = new NativeList<float>(initialCapacity, Allocator.Persistent);
-        _generations = new NativeList<int>(initialCapacity, Allocator.Persistent);
-        _ignoredSplitterIdx = new NativeList<int>(initialCapacity, Allocator.Persistent);
-        _ignoreUntil = new NativeList<float>(initialCapacity, Allocator.Persistent);
-        _expireAt = new NativeList<float>(initialCapacity, Allocator.Persistent);
-        _splitFlags = new NativeList<byte>(initialCapacity, Allocator.Persistent);
-        _splitterHitIdx = new NativeList<int>(initialCapacity, Allocator.Persistent);
-        _transforms = new TransformAccessArray(initialCapacity);
+        int cap = _config != null ? _config.initialCapacity : 256;
+        _positions = new NativeList<float3>(cap, Allocator.Persistent);
+        _velocities = new NativeList<float3>(cap, Allocator.Persistent);
+        _radii = new NativeList<float>(cap, Allocator.Persistent);
+        _generations = new NativeList<int>(cap, Allocator.Persistent);
+        _ignoredSplitterIdx = new NativeList<int>(cap, Allocator.Persistent);
+        _ignoreUntil = new NativeList<float>(cap, Allocator.Persistent);
+        _expireAt = new NativeList<float>(cap, Allocator.Persistent);
+        _splitFlags = new NativeList<byte>(cap, Allocator.Persistent);
+        _splitterHitIdx = new NativeList<int>(cap, Allocator.Persistent);
+        _transforms = new TransformAccessArray(cap);
         _initialized = true;
     }
 
@@ -373,9 +337,9 @@ public class PinballBallManager : MonoBehaviour
                 velocities = _velocities.AsArray(),
                 radii = _radii.AsArray(),
                 count = count,
-                restitution = ballBallRestitution,
-                positionSlop = ballBallPositionSlop,
-                positionCorrection = ballBallPositionCorrection,
+                restitution = _config.ballBallRestitution,
+                positionSlop = _config.ballBallPositionSlop,
+                positionCorrection = _config.ballBallPositionCorrection,
             };
             h = separateJob.Schedule(h);
         }
@@ -428,26 +392,31 @@ public class PinballBallManager : MonoBehaviour
 
         int managed = _initialized ? _positions.Length : 0;
         int total = managed + PinballBallController.AliveGen0Count;
-        debugManagedCount = managed;
-        debugTotalCount = total;
+        if (_config != null)
+        {
+            _config.debugManagedCount = managed;
+            _config.debugTotalCount = total;
+            _config.debugTotalGenerated = _totalGenerated;
+        }
 
-        if (!logBallCount) return;
+        if (_config == null || !_config.logBallCount) return;
         if (Time.unscaledTime < _nextLogTime) return;
-        _nextLogTime = Time.unscaledTime + Mathf.Max(0.05f, logInterval);
+        _nextLogTime = Time.unscaledTime + Mathf.Max(0.05f, _config.logInterval);
         Debug.Log($"[PinballBall] total={total} (gen0={PinballBallController.AliveGen0Count}, gen≥1={managed})");
     }
 
     bool IsResetKeyPressed()
     {
+        KeyCode key = _config != null ? _config.resetKey : KeyCode.R;
 #if ENABLE_INPUT_SYSTEM
         if (Keyboard.current != null)
         {
-            var key = KeyCodeToKey(resetKey);
-            if (key != Key.None && Keyboard.current[key].wasPressedThisFrame) return true;
+            var k = KeyCodeToKey(key);
+            if (k != Key.None && Keyboard.current[k].wasPressedThisFrame) return true;
         }
 #endif
 #if ENABLE_LEGACY_INPUT_MANAGER
-        if (Input.GetKeyDown(resetKey)) return true;
+        if (Input.GetKeyDown(key)) return true;
 #endif
         return false;
     }
@@ -478,24 +447,25 @@ public class PinballBallManager : MonoBehaviour
 
     void OnGUI()
     {
-        if (!showMoneyLabel) return;
-        if (_moneyStyle == null || _moneyStyle.fontSize != moneyFontSize)
+        if (_config == null || !_config.showMoneyLabel) return;
+        int fontSize = _config.moneyFontSize;
+        if (_moneyStyle == null || _moneyStyle.fontSize != fontSize)
         {
             _moneyStyle = new GUIStyle(GUI.skin.label)
             {
-                fontSize = moneyFontSize,
+                fontSize = fontSize,
                 alignment = TextAnchor.UpperRight,
                 fontStyle = FontStyle.Bold,
             };
         }
-        _moneyStyle.normal.textColor = moneyColor;
+        _moneyStyle.normal.textColor = _config.moneyColor;
 
-        long money = (long)_totalGenerated * moneyPerBall;
-        string text = $"{moneyLabelPrefix}{money:N0}{moneyLabelSuffix}";
+        long money = (long)_totalGenerated * _config.moneyPerBall;
+        string text = $"{_config.moneyLabelPrefix}{money:N0}{_config.moneyLabelSuffix}";
 
         float width = 600f;
-        float height = moneyFontSize + 16f;
-        Rect rect = new Rect(Screen.width - width - moneyPadding.x, moneyPadding.y, width, height);
+        float height = fontSize + 16f;
+        Rect rect = new Rect(Screen.width - width - _config.moneyPadding.x, _config.moneyPadding.y, width, height);
 
         // 影 (視認性向上)
         var prevColor = GUI.color;
