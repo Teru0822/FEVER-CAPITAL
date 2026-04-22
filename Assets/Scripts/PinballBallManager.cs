@@ -299,6 +299,7 @@ public class PinballBallManager : MonoBehaviour
         {
             positions = _positions.AsArray(),
             velocities = _velocities.AsArray(),
+            radii = _radii.AsArray(),
             xmin = _boundsXMin,
             xmax = _boundsXMax,
             zmax = _boundsZMax,
@@ -476,16 +477,23 @@ public class PinballBallManager : MonoBehaviour
     {
         public NativeArray<float3> positions;
         public NativeArray<float3> velocities;
+        [ReadOnly] public NativeArray<float> radii;
         public float xmin, xmax, zmax, bounce;
 
         public void Execute(int i)
         {
             float3 p = positions[i];
             float3 v = velocities[i];
+            float r = radii[i];
 
-            if (p.x < xmin) { p.x = xmin; if (v.x < 0f) v.x = -v.x * bounce; }
-            else if (p.x > xmax) { p.x = xmax; if (v.x > 0f) v.x = -v.x * bounce; }
-            if (p.z > zmax) { p.z = zmax; if (v.z > 0f) v.z = -v.z * bounce; }
+            // 球面が境界に触れる位置 (中心 = 境界 ± 半径) でクランプ
+            float xLo = xmin + r;
+            float xHi = xmax - r;
+            float zHi = zmax - r;
+
+            if (p.x < xLo) { p.x = xLo; if (v.x < 0f) v.x = -v.x * bounce; }
+            else if (p.x > xHi) { p.x = xHi; if (v.x > 0f) v.x = -v.x * bounce; }
+            if (p.z > zHi) { p.z = zHi; if (v.z > 0f) v.z = -v.z * bounce; }
 
             positions[i] = p;
             velocities[i] = v;
