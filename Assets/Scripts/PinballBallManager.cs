@@ -22,14 +22,39 @@ public class PinballBallManager : MonoBehaviour
     [Header("ボール同士の衝突応答")]
     [Tooltip("法線方向の反発係数 (0 = 完全非弾性, 0.2 前後で落ち着いた挙動)")]
     [Range(0f, 1f)]
-    public float ballBallRestitution = 0.15f;
+    public float ballBallRestitution = 0.1f;
 
     [Tooltip("この量までの重なりは位置補正しない (ジッタ防止の接触スラック)")]
     public float ballBallPositionSlop = 0.005f;
 
     [Tooltip("位置補正の緩和係数 (1 = 即時解消で振動しやすい。0.2〜0.5 推奨)")]
     [Range(0.05f, 1f)]
-    public float ballBallPositionCorrection = 0.3f;
+    public float ballBallPositionCorrection = 0.2f;
+
+    [Header("所持金 UI")]
+    [Tooltip("ボール 1 個あたりの金額")]
+    public int moneyPerBall = 100;
+
+    [Tooltip("表示ラベルの接頭辞")]
+    public string moneyLabelPrefix = "所持金：";
+
+    [Tooltip("表示ラベルの接尾辞（円、G、pt など）")]
+    public string moneyLabelSuffix = "";
+
+    [Tooltip("所持金ラベルを表示するか")]
+    public bool showMoneyLabel = true;
+
+    [Tooltip("フォントサイズ")]
+    public int moneyFontSize = 32;
+
+    [Tooltip("文字色")]
+    public Color moneyColor = Color.white;
+
+    [Tooltip("右上からの余白 (px)")]
+    public Vector2 moneyPadding = new Vector2(20, 16);
+
+    private int _totalGenerated = 0;
+    private GUIStyle _moneyStyle;
 
     [Header("リセット")]
     [Tooltip("このキーを押すと現在のシーンを再ロードしてゲームを初期化する")]
@@ -132,6 +157,12 @@ public class PinballBallManager : MonoBehaviour
         if (_instance != null && _instance != this) { Destroy(gameObject); return; }
         _instance = this;
         Initialize();
+    }
+
+    void Start()
+    {
+        // この時点でシーン上の gen 0 は OnEnable 済み。初期個数を累積カウンタの起点にする。
+        _totalGenerated = PinballBallController.AliveGen0Count;
     }
 
     void Initialize()
@@ -278,6 +309,7 @@ public class PinballBallManager : MonoBehaviour
         _splitFlags.Add(0);
         _splitterHitIdx.Add(-1);
         _transforms.Add(t);
+        _totalGenerated++;
     }
 
     void Unregister(int index)
@@ -442,6 +474,36 @@ public class PinballBallManager : MonoBehaviour
         _lastJobHandle.Complete();
         Scene active = SceneManager.GetActiveScene();
         SceneManager.LoadScene(active.buildIndex);
+    }
+
+    void OnGUI()
+    {
+        if (!showMoneyLabel) return;
+        if (_moneyStyle == null || _moneyStyle.fontSize != moneyFontSize)
+        {
+            _moneyStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = moneyFontSize,
+                alignment = TextAnchor.UpperRight,
+                fontStyle = FontStyle.Bold,
+            };
+        }
+        _moneyStyle.normal.textColor = moneyColor;
+
+        long money = (long)_totalGenerated * moneyPerBall;
+        string text = $"{moneyLabelPrefix}{money:N0}{moneyLabelSuffix}";
+
+        float width = 600f;
+        float height = moneyFontSize + 16f;
+        Rect rect = new Rect(Screen.width - width - moneyPadding.x, moneyPadding.y, width, height);
+
+        // 影 (視認性向上)
+        var prevColor = GUI.color;
+        GUI.color = new Color(0f, 0f, 0f, 0.6f);
+        GUI.Label(new Rect(rect.x + 2, rect.y + 2, rect.width, rect.height), text, _moneyStyle);
+        GUI.color = prevColor;
+
+        GUI.Label(rect, text, _moneyStyle);
     }
 
     void SpawnChildrenAndDestroy(int index)
