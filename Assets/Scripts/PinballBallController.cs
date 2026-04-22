@@ -50,8 +50,8 @@ public class PinballBallController : MonoBehaviour
     public float manualBoundsZMax = 4.468f;
 
     [Header("ボール同士の衝突")]
-    [Tooltip("gen ≥ 1 同士の位置分離を行うか（速度は変化させない）")]
-    public bool enableBallBallCollision = false;
+    [Tooltip("gen ≥ 1 同士の位置分離 + 法線方向の弱い反発を行うか")]
+    public bool enableBallBallCollision = true;
 
     [Tooltip("gen ≥ 1 ボールの跳ね返り係数（0〜1）")]
     [Range(0f, 1f)]

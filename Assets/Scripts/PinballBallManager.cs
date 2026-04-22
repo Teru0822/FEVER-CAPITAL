@@ -15,6 +15,18 @@ public class PinballBallManager : MonoBehaviour
     [Tooltip("NativeList 初期容量")]
     public int initialCapacity = 256;
 
+    [Header("ボール同士の衝突応答")]
+    [Tooltip("法線方向の反発係数 (0 = 完全非弾性, 0.2 前後で落ち着いた挙動)")]
+    [Range(0f, 1f)]
+    public float ballBallRestitution = 0.15f;
+
+    [Tooltip("この量までの重なりは位置補正しない (ジッタ防止の接触スラック)")]
+    public float ballBallPositionSlop = 0.002f;
+
+    [Tooltip("位置補正の緩和係数 (1 = 即時解消で振動しやすい。0.2〜0.5 推奨)")]
+    [Range(0.05f, 1f)]
+    public float ballBallPositionCorrection = 0.4f;
+
     private static PinballBallManager _instance;
     public static PinballBallManager Instance
     {
@@ -284,8 +296,12 @@ public class PinballBallManager : MonoBehaviour
             var separateJob = new BallBallSeparateJob
             {
                 positions = _positions.AsArray(),
+                velocities = _velocities.AsArray(),
                 radii = _radii.AsArray(),
                 count = count,
+                restitution = ballBallRestitution,
+                positionSlop = ballBallPositionSlop,
+                positionCorrection = ballBallPositionCorrection,
             };
             h = separateJob.Schedule(h);
         }
@@ -449,25 +465,33 @@ public class PinballBallManager : MonoBehaviour
     }
 
     /// <summary>
-    /// O(N²) で重なりを位置分離のみ行う。速度変化なし。
+    /// O(N²) で重なりを位置分離 + 法線方向の相対速度を弱い反発で打ち消す。
+    /// 位置のみの分離だと互いに押し込み合って振動するため、法線方向の近づく速度成分を
+    /// 反発係数 (restitution) で反転させつつ、接触位置スラックで微小重なりは無視する。
     /// 並列化しない (read/write 同時アクセスで race を避けるため)。
     /// </summary>
     [BurstCompile]
     struct BallBallSeparateJob : IJob
     {
         public NativeArray<float3> positions;
+        public NativeArray<float3> velocities;
         [ReadOnly] public NativeArray<float> radii;
         public int count;
+        public float restitution;        // 0 = 完全非弾性、0.2 程度で落ち着いた反発
+        public float positionSlop;       // この量までの重なりは位置補正しない (ジッタ防止)
+        public float positionCorrection; // 位置補正の割合 (0.2〜0.5 推奨、1.0 は即時解消で振動しやすい)
 
         public void Execute()
         {
             for (int i = 0; i < count - 1; i++)
             {
                 float3 pi = positions[i];
+                float3 vi = velocities[i];
                 float ri = radii[i];
                 for (int j = i + 1; j < count; j++)
                 {
                     float3 pj = positions[j];
+                    float3 vj = velocities[j];
                     float rj = radii[j];
                     float dx = pj.x - pi.x;
                     float dz = pj.z - pi.z;
@@ -476,16 +500,40 @@ public class PinballBallManager : MonoBehaviour
                     if (distSq >= minDist * minDist || distSq < 1e-8f) continue;
 
                     float dist = math.sqrt(distSq);
-                    float overlap = (minDist - dist) * 0.5f;
                     float nx = dx / dist;
                     float nz = dz / dist;
-                    pi.x -= nx * overlap;
-                    pi.z -= nz * overlap;
-                    pj.x += nx * overlap;
-                    pj.z += nz * overlap;
+
+                    // --- 位置補正 (スラックを超えた分のみ、緩和係数で少しずつ)
+                    float penetration = minDist - dist;
+                    float corr = math.max(0f, penetration - positionSlop) * positionCorrection * 0.5f;
+                    if (corr > 0f)
+                    {
+                        pi.x -= nx * corr;
+                        pi.z -= nz * corr;
+                        pj.x += nx * corr;
+                        pj.z += nz * corr;
+                    }
+
+                    // --- 速度補正 (接近成分だけ反発で反転)
+                    float rvx = vj.x - vi.x;
+                    float rvz = vj.z - vi.z;
+                    float velAlongNormal = rvx * nx + rvz * nz; // >0 なら離れつつある、<0 なら接近中
+                    if (velAlongNormal < 0f)
+                    {
+                        float jImpulse = -(1f + restitution) * velAlongNormal * 0.5f; // 等質量
+                        float ix = jImpulse * nx;
+                        float iz = jImpulse * nz;
+                        vi.x -= ix;
+                        vi.z -= iz;
+                        vj.x += ix;
+                        vj.z += iz;
+                    }
+
                     positions[j] = pj;
+                    velocities[j] = vj;
                 }
                 positions[i] = pi;
+                velocities[i] = vi;
             }
         }
     }
