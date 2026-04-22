@@ -29,7 +29,7 @@ public class PinballBallManager : MonoBehaviour
 
     [Tooltip("位置補正の緩和係数 (1 = 即時解消で振動しやすい。0.2〜0.5 推奨)")]
     [Range(0.05f, 1f)]
-    public float ballBallPositionCorrection = 0.4f;
+    public float ballBallPositionCorrection = 0.3f;
 
     [Header("リセット")]
     [Tooltip("このキーを押すと現在のシーンを再ロードしてゲームを初期化する")]
@@ -66,9 +66,20 @@ public class PinballBallManager : MonoBehaviour
         }
     }
 
-    /// <summary>シーン開始直後に Manager を生成しておく (R キー等の入力受付のため)。</summary>
+    /// <summary>
+    /// 初回起動時とその後のシーンロードの両方で Manager を生成しておく (R キー等の入力受付のため)。
+    /// [RuntimeInitializeOnLoadMethod] はゲーム起動時の一度しか走らないので、
+    /// SceneManager.sceneLoaded に subscribe してリロード後も復活させる。
+    /// </summary>
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void EnsureInstanceOnSceneLoad()
+    {
+        _ = Instance;
+        SceneManager.sceneLoaded -= HandleSceneLoaded;
+        SceneManager.sceneLoaded += HandleSceneLoaded;
+    }
+
+    private static void HandleSceneLoaded(Scene scene, LoadSceneMode mode)
     {
         _ = Instance;
     }
