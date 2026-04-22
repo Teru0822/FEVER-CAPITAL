@@ -36,7 +36,7 @@ public class PinballBallConfig : MonoBehaviour
     public bool showMoneyLabel = true;
 
     [Tooltip("フォントサイズ")]
-    public int moneyFontSize = 32;
+    public int moneyFontSize = 72;
 
     [Tooltip("文字色")]
     public Color moneyColor = Color.white;

@@ -463,14 +463,17 @@ public class PinballBallManager : MonoBehaviour
         long money = (long)_totalGenerated * _config.moneyPerBall;
         string text = $"{_config.moneyLabelPrefix}{money:N0}{_config.moneyLabelSuffix}";
 
-        float width = 600f;
-        float height = fontSize + 16f;
+        // 文字サイズに応じて矩形サイズも追従させる
+        Vector2 size = _moneyStyle.CalcSize(new GUIContent(text));
+        float width = size.x + 8f;
+        float height = size.y + 8f;
         Rect rect = new Rect(Screen.width - width - _config.moneyPadding.x, _config.moneyPadding.y, width, height);
 
-        // 影 (視認性向上)
+        // 影 (視認性向上) — フォントサイズに比例してオフセットを調整
+        float shadow = Mathf.Max(2f, fontSize * 0.05f);
         var prevColor = GUI.color;
         GUI.color = new Color(0f, 0f, 0f, 0.6f);
-        GUI.Label(new Rect(rect.x + 2, rect.y + 2, rect.width, rect.height), text, _moneyStyle);
+        GUI.Label(new Rect(rect.x + shadow, rect.y + shadow, rect.width, rect.height), text, _moneyStyle);
         GUI.color = prevColor;
 
         GUI.Label(rect, text, _moneyStyle);
