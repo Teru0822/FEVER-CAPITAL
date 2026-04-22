@@ -82,6 +82,12 @@ public class PinballBallController : MonoBehaviour
     private static int _ballLayer = -1;
     private static bool _ballLayerCollisionDisabled = false;
 
+    /// <summary>現在シーンに存在する gen 0 ボールの数 (デバッグ用)</summary>
+    public static int AliveGen0Count { get; private set; }
+
+    void OnEnable() { AliveGen0Count++; }
+    void OnDisable() { AliveGen0Count--; }
+
     void Awake()
     {
         rb = GetComponent<Rigidbody>();

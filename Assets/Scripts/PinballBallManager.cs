@@ -27,6 +27,21 @@ public class PinballBallManager : MonoBehaviour
     [Range(0.05f, 1f)]
     public float ballBallPositionCorrection = 0.4f;
 
+    [Header("デバッグ")]
+    [Tooltip("現在のボール総数 (gen 0 + gen ≥ 1) を Console にログ出力する")]
+    public bool logBallCount = true;
+
+    [Tooltip("ログ出力間隔 (秒)")]
+    public float logInterval = 0.5f;
+
+    [Tooltip("実行時の gen ≥ 1 数 (読み取り専用表示)")]
+    public int debugManagedCount;
+
+    [Tooltip("実行時の総数 (gen 0 + gen ≥ 1) (読み取り専用表示)")]
+    public int debugTotalCount;
+
+    private float _nextLogTime = 0f;
+
     private static PinballBallManager _instance;
     public static PinballBallManager Instance
     {
@@ -342,6 +357,19 @@ public class PinballBallManager : MonoBehaviour
             if (flag == 1) SpawnChildrenAndDestroy(i);
             else if (flag == 2) DestroyAt(i);
         }
+    }
+
+    void LateUpdate()
+    {
+        int managed = _initialized ? _positions.Length : 0;
+        int total = managed + PinballBallController.AliveGen0Count;
+        debugManagedCount = managed;
+        debugTotalCount = total;
+
+        if (!logBallCount) return;
+        if (Time.unscaledTime < _nextLogTime) return;
+        _nextLogTime = Time.unscaledTime + Mathf.Max(0.05f, logInterval);
+        Debug.Log($"[PinballBall] total={total} (gen0={PinballBallController.AliveGen0Count}, gen≥1={managed})");
     }
 
     void SpawnChildrenAndDestroy(int index)
