@@ -4,6 +4,10 @@ using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Jobs;
+using UnityEngine.SceneManagement;
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+#endif
 
 /// <summary>
 /// 分裂後 (gen ≥ 1) のボールを NativeArray で一括管理し、
@@ -21,11 +25,15 @@ public class PinballBallManager : MonoBehaviour
     public float ballBallRestitution = 0.15f;
 
     [Tooltip("この量までの重なりは位置補正しない (ジッタ防止の接触スラック)")]
-    public float ballBallPositionSlop = 0.002f;
+    public float ballBallPositionSlop = 0.005f;
 
     [Tooltip("位置補正の緩和係数 (1 = 即時解消で振動しやすい。0.2〜0.5 推奨)")]
     [Range(0.05f, 1f)]
     public float ballBallPositionCorrection = 0.4f;
+
+    [Header("リセット")]
+    [Tooltip("このキーを押すと現在のシーンを再ロードしてゲームを初期化する")]
+    public KeyCode resetKey = KeyCode.R;
 
     [Header("デバッグ")]
     [Tooltip("現在のボール総数 (gen 0 + gen ≥ 1) を Console にログ出力する")]
@@ -56,6 +64,13 @@ public class PinballBallManager : MonoBehaviour
             }
             return _instance;
         }
+    }
+
+    /// <summary>シーン開始直後に Manager を生成しておく (R キー等の入力受付のため)。</summary>
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    private static void EnsureInstanceOnSceneLoad()
+    {
+        _ = Instance;
     }
 
     // ボール配列
@@ -362,6 +377,12 @@ public class PinballBallManager : MonoBehaviour
 
     void LateUpdate()
     {
+        if (IsResetKeyPressed())
+        {
+            ResetGame();
+            return;
+        }
+
         int managed = _initialized ? _positions.Length : 0;
         int total = managed + PinballBallController.AliveGen0Count;
         debugManagedCount = managed;
@@ -371,6 +392,45 @@ public class PinballBallManager : MonoBehaviour
         if (Time.unscaledTime < _nextLogTime) return;
         _nextLogTime = Time.unscaledTime + Mathf.Max(0.05f, logInterval);
         Debug.Log($"[PinballBall] total={total} (gen0={PinballBallController.AliveGen0Count}, gen≥1={managed})");
+    }
+
+    bool IsResetKeyPressed()
+    {
+#if ENABLE_INPUT_SYSTEM
+        if (Keyboard.current != null)
+        {
+            var key = KeyCodeToKey(resetKey);
+            if (key != Key.None && Keyboard.current[key].wasPressedThisFrame) return true;
+        }
+#endif
+#if ENABLE_LEGACY_INPUT_MANAGER
+        if (Input.GetKeyDown(resetKey)) return true;
+#endif
+        return false;
+    }
+
+#if ENABLE_INPUT_SYSTEM
+    static Key KeyCodeToKey(KeyCode code)
+    {
+        // 主要キーのみサポート。必要に応じて拡張。
+        if (code >= KeyCode.A && code <= KeyCode.Z) return Key.A + (int)(code - KeyCode.A);
+        if (code >= KeyCode.Alpha0 && code <= KeyCode.Alpha9) return Key.Digit0 + (int)(code - KeyCode.Alpha0);
+        switch (code)
+        {
+            case KeyCode.Space: return Key.Space;
+            case KeyCode.Return: return Key.Enter;
+            case KeyCode.Escape: return Key.Escape;
+            case KeyCode.Tab: return Key.Tab;
+            default: return Key.None;
+        }
+    }
+#endif
+
+    public void ResetGame()
+    {
+        _lastJobHandle.Complete();
+        Scene active = SceneManager.GetActiveScene();
+        SceneManager.LoadScene(active.buildIndex);
     }
 
     void SpawnChildrenAndDestroy(int index)
