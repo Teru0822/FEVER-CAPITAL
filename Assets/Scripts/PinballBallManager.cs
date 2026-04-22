@@ -110,13 +110,14 @@ public class PinballBallManager : MonoBehaviour
         _ballTemplate.name = "[PinballBallTemplate]";
         _ballTemplate.hideFlags = HideFlags.HideAndDontSave;
         DontDestroyOnLoad(_ballTemplate);
-        // テンプレートから Rigidbody / Collider / Controller を除去
-        var tmplRb = _ballTemplate.GetComponent<Rigidbody>();
-        if (tmplRb != null) Destroy(tmplRb);
-        var tmplCol = _ballTemplate.GetComponent<Collider>();
-        if (tmplCol != null) Destroy(tmplCol);
+        // テンプレートから Controller → Rigidbody → Collider の順に即時除去
+        // ([RequireComponent] 制約があるので Controller を先に、かつ DestroyImmediate で同フレームに反映)
         var tmplCtrl = _ballTemplate.GetComponent<PinballBallController>();
-        if (tmplCtrl != null) Destroy(tmplCtrl);
+        if (tmplCtrl != null) DestroyImmediate(tmplCtrl);
+        var tmplRb = _ballTemplate.GetComponent<Rigidbody>();
+        if (tmplRb != null) DestroyImmediate(tmplRb);
+        var tmplCol = _ballTemplate.GetComponent<Collider>();
+        if (tmplCol != null) DestroyImmediate(tmplCol);
         src.SetActive(wasActive);
 
         _boundsXMin = c.manualBoundsXMin;
