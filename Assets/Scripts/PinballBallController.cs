@@ -147,16 +147,17 @@ public class PinballBallController : MonoBehaviour
     void FixedUpdate()
     {
         _isSplitting = false;
-        float g = Mathf.Abs(Physics.gravity.y);
-        if (_useManualGravity)
+        if (_useManualGravity && _config != null)
         {
-            // スケール倍率 S で重力強度も S 倍 (Y 下向き + Z+ 方向) にしないと体感が変わる
-            float s = _config != null ? _config.CurrentScaleFactor : 1f;
-            rb.AddForce(new Vector3(0f, -rb.mass * g * s, rb.mass * g * s), ForceMode.Force);
+            // Config.gravity を scale 倍して手動適用 (Unity 重力は OFF)
+            float s = _config.CurrentScaleFactor;
+            Vector3 grav = _config.EffectiveGravity;
+            rb.AddForce(rb.mass * s * grav, ForceMode.Force);
         }
         else
         {
             // 従来互換: Unity 重力 (-Y) + Z+ 方向の相殺力
+            float g = Mathf.Abs(Physics.gravity.y);
             rb.AddForce(new Vector3(0f, 0f, rb.mass * g), ForceMode.Force);
         }
     }

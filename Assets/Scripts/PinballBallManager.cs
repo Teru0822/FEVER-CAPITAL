@@ -369,8 +369,9 @@ public class PinballBallManager : MonoBehaviour
         for (int i = 0; i < count; i++) _splitFlags[i] = 0;
 
         float dt = Time.deltaTime;
+        // Config に設定された gravity ベクトルの XZ 成分を用いる (Y は floor 固定なので無視)
         // スケールと同じ倍率で重力強度も引き上げる (視覚的タイミングを維持)
-        float gravityMag = Mathf.Abs(Physics.gravity.y) * _scaleFactor;
+        Vector3 effGravity = _config != null ? _config.EffectiveGravity : new Vector3(0f, -Mathf.Abs(Physics.gravity.y), Mathf.Abs(Physics.gravity.y));
 
         var integrateJob = new IntegrateJob
         {
@@ -378,7 +379,8 @@ public class PinballBallManager : MonoBehaviour
             velocities = _velocities.AsArray(),
             radii = _radii.AsArray(),
             dt = dt,
-            gravityZ = gravityMag,
+            gravityX = effGravity.x * _scaleFactor,
+            gravityZ = effGravity.z * _scaleFactor,
             floorY = _floorY,
         };
         JobHandle h = integrateJob.Schedule(count, 64);
@@ -695,6 +697,7 @@ public class PinballBallManager : MonoBehaviour
         public NativeArray<float3> velocities;
         [ReadOnly] public NativeArray<float> radii;
         public float dt;
+        public float gravityX;
         public float gravityZ;
         public float floorY;
 
@@ -702,6 +705,7 @@ public class PinballBallManager : MonoBehaviour
         {
             float3 v = velocities[i];
             v.y = 0f;
+            v.x += gravityX * dt;
             v.z += gravityZ * dt;
             velocities[i] = v;
 

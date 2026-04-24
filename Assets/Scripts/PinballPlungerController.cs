@@ -37,7 +37,10 @@ public class PinballPlungerController : MonoBehaviour
     private float naturalZ;    // ばねの自然長（初期Z座標）
     private PinballBallConfig _config;
     private float _scaleFactor = 1f;
-    private float _worldMaxZ;
+    // 引っ張り目標 Z (gravity.z の符号で naturalZ から +/- に反転)
+    private float _targetZ;
+    // 引っ張り方向 (+1 で Z+ / -1 で Z- / 0 はガード)
+    private float _pullDir = 1f;
     private float _worldPullSpeed;
 
     void Start()
@@ -50,16 +53,25 @@ public class PinballPlungerController : MonoBehaviour
 
         // pinballRoot のスケール/位置に追従: authored world maxZ を現在 root ポーズへ変換
         _scaleFactor = _config != null ? _config.CurrentScaleFactor : 1f;
+        float authoredWorldMaxZ;
         if (_config != null)
         {
             Vector3 worldMax = _config.TransformAuthoredPoint(new Vector3(0f, 0f, maxZ));
-            _worldMaxZ = worldMax.z;
+            authoredWorldMaxZ = worldMax.z;
         }
         else
         {
-            _worldMaxZ = maxZ;
+            authoredWorldMaxZ = maxZ;
         }
         _worldPullSpeed = pullSpeed * _scaleFactor;
+
+        // 引っ張り方向は gravity.z の符号に追従
+        // gravity.z > 0 → naturalZ から +Z へ引っ張る (authored maxZ 側)
+        // gravity.z < 0 → naturalZ から -Z へ引っ張る (naturalZ を挟んで反対側)
+        float gz = (_config != null) ? _config.EffectiveGravity.z : 1f;
+        _pullDir = (gz < 0f) ? -1f : 1f;
+        float pullDistance = Mathf.Abs(authoredWorldMaxZ - naturalZ);
+        _targetZ = naturalZ + _pullDir * pullDistance;
 
         // Z軸のみ移動可能に制約
         rb.constraints = RigidbodyConstraints.FreezePositionX
@@ -138,23 +150,24 @@ public class PinballPlungerController : MonoBehaviour
 
         if (Keyboard.current != null && Keyboard.current.spaceKey.isPressed)
         {
-            // SPACEキー押下中：Z軸正方向へ引っ張る
-            if (currentZ < _worldMaxZ)
+            // SPACEキー押下中：gravity.z の符号方向へ引っ張る
+            // _pullDir > 0 なら currentZ < _targetZ の間は加速、到達で停止
+            // _pullDir < 0 なら currentZ > _targetZ の間は加速、到達で停止
+            bool stillPulling = (_pullDir > 0f) ? (currentZ < _targetZ) : (currentZ > _targetZ);
+            if (stillPulling)
             {
-                // pullSpeedの速度でZ+方向へ移動 (スケール倍率込み)
                 Vector3 vel = rb.linearVelocity;
-                vel.z = _worldPullSpeed;
+                vel.z = _worldPullSpeed * _pullDir;
                 rb.linearVelocity = vel;
             }
             else
             {
-                // maxZに達したら停止
+                // 目標到達で停止 + クランプ
                 Vector3 vel = rb.linearVelocity;
                 vel.z = 0f;
                 rb.linearVelocity = vel;
-                // maxZを超えないようにクランプ
                 Vector3 pos = rb.position;
-                pos.z = _worldMaxZ;
+                pos.z = _targetZ;
                 rb.MovePosition(pos);
             }
         }
