@@ -38,6 +38,24 @@ public class PinballBallConfig : MonoBehaviour
         return pinballRoot.position + (authored - authoredRootPosition) * s;
     }
 
+    [Header("重力")]
+    [Tooltip("ピンボール盤面の重力ベクトル (m/s²)。既定 (0, -9.81, 9.81) は Y下 + Z前 (斜面)。X を増やすと左右にも流れる。")]
+    public Vector3 gravity = new Vector3(0f, -9.81f, 9.81f);
+
+    [Tooltip("ON にすると gravity を pinballRoot のローカル軸で解釈する (root を回転すると重力方向も回る)")]
+    public bool gravityInLocalSpace = false;
+
+    /// <summary>gravity と gravityInLocalSpace / pinballRoot から算出した実効重力ベクトル。</summary>
+    public Vector3 EffectiveGravity
+    {
+        get
+        {
+            if (gravityInLocalSpace && pinballRoot != null)
+                return pinballRoot.TransformDirection(gravity);
+            return gravity;
+        }
+    }
+
     [ContextMenu("Capture Current Root Pose")]
     void CaptureCurrentRootPose()
     {
