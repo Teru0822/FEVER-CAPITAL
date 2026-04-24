@@ -7,6 +7,50 @@ using UnityEngine;
 /// </summary>
 public class PinballBallConfig : MonoBehaviour
 {
+    [Header("位置・スケール追従")]
+    [Tooltip("ピンボール全体のルート Transform。これを動かす/スケールすると境界・半径・速度が自動追従する。null なら従来の絶対世界座標で動作。")]
+    public Transform pinballRoot;
+
+    [Tooltip("authored 時点での pinballRoot.position。Context Menu 『Capture Current Root Pose』 で自動取得可。")]
+    public Vector3 authoredRootPosition = Vector3.zero;
+
+    [Tooltip("authored 時点での pinballRoot.lossyScale.x。")]
+    public float authoredRootScale = 1f;
+
+    /// <summary>現在の pinballRoot と authored 値の比から求まる一様スケール倍率 (root が null なら 1)。</summary>
+    public float CurrentScaleFactor
+    {
+        get
+        {
+            if (pinballRoot == null) return 1f;
+            return pinballRoot.lossyScale.x / Mathf.Max(0.0001f, authoredRootScale);
+        }
+    }
+
+    /// <summary>
+    /// authored world 座標値を現在の pinballRoot ポーズに合わせて変換する。
+    /// = currentRoot.position + (authored - authoredRootPosition) * scaleFactor
+    /// </summary>
+    public Vector3 TransformAuthoredPoint(Vector3 authored)
+    {
+        if (pinballRoot == null) return authored;
+        float s = CurrentScaleFactor;
+        return pinballRoot.position + (authored - authoredRootPosition) * s;
+    }
+
+    [ContextMenu("Capture Current Root Pose")]
+    void CaptureCurrentRootPose()
+    {
+        if (pinballRoot == null)
+        {
+            Debug.LogWarning("[PinballBallConfig] pinballRoot が未設定のため Capture できません。");
+            return;
+        }
+        authoredRootPosition = pinballRoot.position;
+        authoredRootScale = pinballRoot.lossyScale.x;
+        Debug.Log($"[PinballBallConfig] Captured authoredRootPosition={authoredRootPosition}, authoredRootScale={authoredRootScale}");
+    }
+
     [Tooltip("NativeList 初期容量")]
     public int initialCapacity = 256;
 
