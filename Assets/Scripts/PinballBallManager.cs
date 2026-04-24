@@ -104,6 +104,18 @@ public class PinballBallManager : MonoBehaviour
     private bool _enableBallBallCollision;
     private float _maxBallRadius = 0.08f;
 
+    // 位置・スケール追従: pinballRoot が移動/スケールした分の補正値
+    private float _scaleFactor = 1f;
+
+    /// <summary>他スクリプト (PinballBallController など) から読める最新の scaleFactor。EnsureConfigured 後に有効。</summary>
+    public static float RuntimeScaleFactor { get; private set; } = 1f;
+
+    Vector3 TransformAuthored(Vector3 authored)
+    {
+        if (_config == null) return authored;
+        return _config.TransformAuthoredPoint(authored);
+    }
+
     // 空間ハッシュ (ボール同士の衝突を O(N²) → O(N·k) に高速化)
     private NativeList<int> _cellKeys;
     private NativeList<int> _sortedIdx;
@@ -195,21 +207,30 @@ public class PinballBallManager : MonoBehaviour
         if (tmplCol != null) DestroyImmediate(tmplCol);
         src.SetActive(wasActive);
 
-        _boundsXMin = c.manualBoundsXMin;
-        _boundsXMax = c.manualBoundsXMax;
-        _boundsZMax = c.manualBoundsZMax;
-        _boundsZMin = c.manualBoundsZMin;
-        _maxBallRadius = Mathf.Max(0.001f, c.initialDetectionRadius);
+        // pinballRoot に追従するスケール倍率 (root が null なら 1)
+        _scaleFactor = _config != null ? _config.CurrentScaleFactor : 1f;
+        RuntimeScaleFactor = _scaleFactor;
+
+        // authored world 値 → 現在 root ポーズに合わせた world 値へ変換
+        Vector3 boundsMin = TransformAuthored(new Vector3(c.manualBoundsXMin, 0f, c.manualBoundsZMin));
+        Vector3 boundsMax = TransformAuthored(new Vector3(c.manualBoundsXMax, 0f, c.manualBoundsZMax));
+        _boundsXMin = boundsMin.x;
+        _boundsXMax = boundsMax.x;
+        _boundsZMin = boundsMin.z;
+        _boundsZMax = boundsMax.z;
+
+        _maxBallRadius = Mathf.Max(0.001f, c.initialDetectionRadius * _scaleFactor);
         _bounceFactor = c.manualBounceFactor;
         _lifetime = c.manualLifetime;
         _splitScaleRatio = c.splitScaleRatio;
         _splitCount = Mathf.Max(2, c.splitCount);
-        _splitSpread = c.splitSpread;
-        _spawnXOffset = c.spawnXOffset;
+        _splitSpread = c.splitSpread * _scaleFactor;
+        _spawnXOffset = c.spawnXOffset * _scaleFactor;
         _particleGeneration = c.particleGeneration;
         _splitParticlePrefab = c.splitParticlePrefab;
-        _hideParticleXMax = c.hideParticleXMax;
-        _hideParticleZMin = c.hideParticleZMin;
+        Vector3 hideRef = TransformAuthored(new Vector3(c.hideParticleXMax, 0f, c.hideParticleZMin));
+        _hideParticleXMax = hideRef.x;
+        _hideParticleZMin = hideRef.z;
         _splitTargetTag = c.splitTargetTag;
         _ignoreCollisionDuration = c.ignoreCollisionDuration;
         _enableBallBallCollision = c.enableBallBallCollision;
@@ -277,7 +298,8 @@ public class PinballBallManager : MonoBehaviour
 
         int splitterIdx = GetSplitterIndex(splitterCol);
         int count = _splitCount;
-        float childRadius = source.initialDetectionRadius;
+        // _maxBallRadius は EnsureConfigured で scaleFactor 倍済み
+        float childRadius = _maxBallRadius;
         Vector3 childScale = source.transform.localScale * _splitScaleRatio;
         float xOffset = _spawnXOffset;
 
@@ -347,7 +369,8 @@ public class PinballBallManager : MonoBehaviour
         for (int i = 0; i < count; i++) _splitFlags[i] = 0;
 
         float dt = Time.deltaTime;
-        float gravityMag = Mathf.Abs(Physics.gravity.y);
+        // スケールと同じ倍率で重力強度も引き上げる (視覚的タイミングを維持)
+        float gravityMag = Mathf.Abs(Physics.gravity.y) * _scaleFactor;
 
         var integrateJob = new IntegrateJob
         {
@@ -413,7 +436,8 @@ public class PinballBallManager : MonoBehaviour
                 cellSize = _cellSize,
                 gridOrigin = _gridOrigin,
                 restitution = _config.ballBallRestitution,
-                positionSlop = _config.ballBallPositionSlop,
+                // 重なり距離 (slop) は長さ次元なのでスケール倍率に追従
+                positionSlop = _config.ballBallPositionSlop * _scaleFactor,
                 positionCorrection = _config.ballBallPositionCorrection,
             };
             h = separateJob.Schedule(h);

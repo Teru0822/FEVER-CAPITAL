@@ -81,6 +81,9 @@ public class PinballBallController : MonoBehaviour
 
     private Rigidbody rb;
     private SphereCollider sphereCol;
+    private PinballBallConfig _config;
+    // pinballRoot でスケール追従する時は Unity 重力を切って手動で Y/Z 双方に scaled gravity を掛ける
+    private bool _useManualGravity = false;
 
     private static int _ballLayer = -1;
     private static bool _ballLayerCollisionDisabled = false;
@@ -93,9 +96,14 @@ public class PinballBallController : MonoBehaviour
 
     void Awake()
     {
+        _config = FindFirstObjectByType<PinballBallConfig>();
+        // pinballRoot が設定されている時は Unity 重力を切って手動適用
+        // (Unity のグローバル gravity は scaleFactor で変更できないため)
+        _useManualGravity = _config != null && _config.pinballRoot != null;
+
         rb = GetComponent<Rigidbody>();
         rb.mass = mass;
-        rb.useGravity = true;
+        rb.useGravity = !_useManualGravity;
         rb.constraints = RigidbodyConstraints.None;
         rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
 
@@ -139,7 +147,18 @@ public class PinballBallController : MonoBehaviour
     void FixedUpdate()
     {
         _isSplitting = false;
-        rb.AddForce(new Vector3(0f, 0f, rb.mass * Mathf.Abs(Physics.gravity.y)), ForceMode.Force);
+        float g = Mathf.Abs(Physics.gravity.y);
+        if (_useManualGravity)
+        {
+            // スケール倍率 S で重力強度も S 倍 (Y 下向き + Z+ 方向) にしないと体感が変わる
+            float s = _config != null ? _config.CurrentScaleFactor : 1f;
+            rb.AddForce(new Vector3(0f, -rb.mass * g * s, rb.mass * g * s), ForceMode.Force);
+        }
+        else
+        {
+            // 従来互換: Unity 重力 (-Y) + Z+ 方向の相殺力
+            rb.AddForce(new Vector3(0f, 0f, rb.mass * g), ForceMode.Force);
+        }
     }
 
     void OnCollisionEnter(Collision collision)

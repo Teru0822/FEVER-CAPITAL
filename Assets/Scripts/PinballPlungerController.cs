@@ -35,13 +35,31 @@ public class PinballPlungerController : MonoBehaviour
 
     private Rigidbody rb;
     private float naturalZ;    // ばねの自然長（初期Z座標）
+    private PinballBallConfig _config;
+    private float _scaleFactor = 1f;
+    private float _worldMaxZ;
+    private float _worldPullSpeed;
 
     void Start()
     {
         rb = GetComponent<Rigidbody>();
+        _config = FindFirstObjectByType<PinballBallConfig>();
 
         // 自然長として初期Z座標を記録
         naturalZ = transform.position.z;
+
+        // pinballRoot のスケール/位置に追従: authored world maxZ を現在 root ポーズへ変換
+        _scaleFactor = _config != null ? _config.CurrentScaleFactor : 1f;
+        if (_config != null)
+        {
+            Vector3 worldMax = _config.TransformAuthoredPoint(new Vector3(0f, 0f, maxZ));
+            _worldMaxZ = worldMax.z;
+        }
+        else
+        {
+            _worldMaxZ = maxZ;
+        }
+        _worldPullSpeed = pullSpeed * _scaleFactor;
 
         // Z軸のみ移動可能に制約
         rb.constraints = RigidbodyConstraints.FreezePositionX
@@ -121,11 +139,11 @@ public class PinballPlungerController : MonoBehaviour
         if (Keyboard.current != null && Keyboard.current.spaceKey.isPressed)
         {
             // SPACEキー押下中：Z軸正方向へ引っ張る
-            if (currentZ < maxZ)
+            if (currentZ < _worldMaxZ)
             {
-                // pullSpeedの速度でZ+方向へ移動
+                // pullSpeedの速度でZ+方向へ移動 (スケール倍率込み)
                 Vector3 vel = rb.linearVelocity;
-                vel.z = pullSpeed;
+                vel.z = _worldPullSpeed;
                 rb.linearVelocity = vel;
             }
             else
@@ -136,7 +154,7 @@ public class PinballPlungerController : MonoBehaviour
                 rb.linearVelocity = vel;
                 // maxZを超えないようにクランプ
                 Vector3 pos = rb.position;
-                pos.z = maxZ;
+                pos.z = _worldMaxZ;
                 rb.MovePosition(pos);
             }
         }
