@@ -88,7 +88,7 @@ public class PinballBallManager : MonoBehaviour
     // Controller から一度だけ取り込む設定値
     private bool _configCached = false;
     private GameObject _ballTemplate;
-    private float _boundsXMin, _boundsXMax, _boundsZMax;
+    private float _boundsXMin, _boundsXMax, _boundsZMax, _boundsZMin;
     private float _bounceFactor;
     private float _lifetime;
     private float _splitScaleRatio;
@@ -102,6 +102,17 @@ public class PinballBallManager : MonoBehaviour
     private string _splitTargetTag = "Splitter";
     private float _ignoreCollisionDuration;
     private bool _enableBallBallCollision;
+    private float _maxBallRadius = 0.08f;
+
+    // 空間ハッシュ (ボール同士の衝突を O(N²) → O(N·k) に高速化)
+    private NativeList<int> _cellKeys;
+    private NativeList<int> _sortedIdx;
+    private NativeArray<int> _cellCounts;
+    private NativeArray<int> _cellStart;
+    private int _gridWidth, _gridHeight, _gridSize;
+    private float _cellSize;
+    private float2 _gridOrigin;
+    private bool _gridReady = false;
 
     private bool _initialized = false;
     private JobHandle _lastJobHandle;
@@ -155,6 +166,8 @@ public class PinballBallManager : MonoBehaviour
         _expireAt = new NativeList<float>(cap, Allocator.Persistent);
         _splitFlags = new NativeList<byte>(cap, Allocator.Persistent);
         _splitterHitIdx = new NativeList<int>(cap, Allocator.Persistent);
+        _cellKeys = new NativeList<int>(cap, Allocator.Persistent);
+        _sortedIdx = new NativeList<int>(cap, Allocator.Persistent);
         _transforms = new TransformAccessArray(cap);
         _initialized = true;
     }
@@ -185,6 +198,8 @@ public class PinballBallManager : MonoBehaviour
         _boundsXMin = c.manualBoundsXMin;
         _boundsXMax = c.manualBoundsXMax;
         _boundsZMax = c.manualBoundsZMax;
+        _boundsZMin = c.manualBoundsZMin;
+        _maxBallRadius = Mathf.Max(0.001f, c.initialDetectionRadius);
         _bounceFactor = c.manualBounceFactor;
         _lifetime = c.manualLifetime;
         _splitScaleRatio = c.splitScaleRatio;
@@ -209,6 +224,20 @@ public class PinballBallManager : MonoBehaviour
             _splitterTransforms[i] = splitters[i].transform;
             _splitterColliders[i] = splitters[i].GetComponent<Collider>();
         }
+
+        // 空間ハッシュのグリッドを構築 (セル = 最大半径 × 2)
+        _cellSize = _maxBallRadius * 2f;
+        float pad = _cellSize;
+        _gridOrigin = new float2(_boundsXMin - pad, _boundsZMin - pad);
+        float spanX = (_boundsXMax - _boundsXMin) + 2f * pad;
+        float spanZ = (_boundsZMax - _boundsZMin) + 2f * pad;
+        _gridWidth = Mathf.Max(1, Mathf.CeilToInt(spanX / _cellSize));
+        _gridHeight = Mathf.Max(1, Mathf.CeilToInt(spanZ / _cellSize));
+        _gridSize = _gridWidth * _gridHeight;
+        _cellCounts = new NativeArray<int>(_gridSize, Allocator.Persistent);
+        _cellStart = new NativeArray<int>(_gridSize + 1, Allocator.Persistent);
+        _gridReady = true;
+
         _configCached = true;
     }
 
@@ -343,14 +372,46 @@ public class PinballBallManager : MonoBehaviour
         };
         h = boundsJob.Schedule(count, 64, h);
 
-        if (_enableBallBallCollision && count > 1)
+        if (_enableBallBallCollision && count > 1 && _gridReady)
         {
-            var separateJob = new BallBallSeparateJob
+            _cellKeys.ResizeUninitialized(count);
+            _sortedIdx.ResizeUninitialized(count);
+
+            var cellKeysJob = new ComputeCellKeysJob
+            {
+                positions = _positions.AsArray(),
+                cellKeys = _cellKeys.AsArray(),
+                sortedIdx = _sortedIdx.AsArray(),
+                gridOrigin = _gridOrigin,
+                cellSize = _cellSize,
+                gridWidth = _gridWidth,
+                gridHeight = _gridHeight,
+            };
+            h = cellKeysJob.Schedule(count, 64, h);
+
+            var buildJob = new BuildGridJob
+            {
+                cellKeys = _cellKeys.AsArray(),
+                cellCounts = _cellCounts,
+                cellStart = _cellStart,
+                sortedIdx = _sortedIdx.AsArray(),
+                count = count,
+                gridSize = _gridSize,
+            };
+            h = buildJob.Schedule(h);
+
+            var separateJob = new BallBallSeparateSpatialJob
             {
                 positions = _positions.AsArray(),
                 velocities = _velocities.AsArray(),
                 radii = _radii.AsArray(),
+                sortedIdx = _sortedIdx.AsArray(),
+                cellStart = _cellStart,
                 count = count,
+                gridWidth = _gridWidth,
+                gridHeight = _gridHeight,
+                cellSize = _cellSize,
+                gridOrigin = _gridOrigin,
                 restitution = _config.ballBallRestitution,
                 positionSlop = _config.ballBallPositionSlop,
                 positionCorrection = _config.ballBallPositionCorrection,
@@ -592,6 +653,10 @@ public class PinballBallManager : MonoBehaviour
         if (_expireAt.IsCreated) _expireAt.Dispose();
         if (_splitFlags.IsCreated) _splitFlags.Dispose();
         if (_splitterHitIdx.IsCreated) _splitterHitIdx.Dispose();
+        if (_cellKeys.IsCreated) _cellKeys.Dispose();
+        if (_sortedIdx.IsCreated) _sortedIdx.Dispose();
+        if (_cellCounts.IsCreated) _cellCounts.Dispose();
+        if (_cellStart.IsCreated) _cellStart.Dispose();
         if (_transforms.isCreated) _transforms.Dispose();
         if (_splitterPositions.IsCreated) _splitterPositions.Dispose();
         if (_instance == this) _instance = null;
@@ -653,72 +718,161 @@ public class PinballBallManager : MonoBehaviour
     }
 
     /// <summary>
-    /// O(N²) で重なりを位置分離 + 法線方向の相対速度を弱い反発で打ち消す。
-    /// 位置のみの分離だと互いに押し込み合って振動するため、法線方向の近づく速度成分を
-    /// 反発係数 (restitution) で反転させつつ、接触位置スラックで微小重なりは無視する。
-    /// 並列化しない (read/write 同時アクセスで race を避けるため)。
+    /// 各ボールの所属セル key = cz * gridWidth + cx を求め、sortedIdx を i で初期化する。
     /// </summary>
     [BurstCompile]
-    struct BallBallSeparateJob : IJob
+    struct ComputeCellKeysJob : IJobParallelFor
+    {
+        [ReadOnly] public NativeArray<float3> positions;
+        [WriteOnly] public NativeArray<int> cellKeys;
+        [WriteOnly] public NativeArray<int> sortedIdx;
+        public float2 gridOrigin;
+        public float cellSize;
+        public int gridWidth;
+        public int gridHeight;
+
+        public void Execute(int i)
+        {
+            float3 p = positions[i];
+            int cx = (int)math.floor((p.x - gridOrigin.x) / cellSize);
+            int cz = (int)math.floor((p.z - gridOrigin.y) / cellSize);
+            cx = math.clamp(cx, 0, gridWidth - 1);
+            cz = math.clamp(cz, 0, gridHeight - 1);
+            cellKeys[i] = cz * gridWidth + cx;
+            sortedIdx[i] = i;
+        }
+    }
+
+    /// <summary>
+    /// カウンティングソート方式で cellStart を構築し、sortedIdx をセル順に並べ替える。
+    /// cellStart[k]..cellStart[k+1] が cell k に所属するボールの sortedIdx 範囲となる。
+    /// </summary>
+    [BurstCompile]
+    struct BuildGridJob : IJob
+    {
+        [ReadOnly] public NativeArray<int> cellKeys;
+        public NativeArray<int> cellCounts;
+        public NativeArray<int> cellStart;
+        public NativeArray<int> sortedIdx;
+        public int count;
+        public int gridSize;
+
+        public void Execute()
+        {
+            for (int k = 0; k < gridSize; k++) cellCounts[k] = 0;
+            for (int i = 0; i < count; i++) cellCounts[cellKeys[i]]++;
+
+            int sum = 0;
+            for (int k = 0; k < gridSize; k++)
+            {
+                cellStart[k] = sum;
+                sum += cellCounts[k];
+            }
+            cellStart[gridSize] = sum;
+
+            for (int k = 0; k < gridSize; k++) cellCounts[k] = 0;
+            for (int i = 0; i < count; i++)
+            {
+                int k = cellKeys[i];
+                int slot = cellStart[k] + cellCounts[k];
+                sortedIdx[slot] = i;
+                cellCounts[k]++;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 空間グリッドを使って 3x3 近傍セルだけを走査し、O(N·k) で位置分離 + 反発を行う。
+    /// cell size = 2 * maxBallRadius にしているため、3x3 セルに入るボールだけが最大接触相手になる。
+    /// </summary>
+    [BurstCompile]
+    struct BallBallSeparateSpatialJob : IJob
     {
         public NativeArray<float3> positions;
         public NativeArray<float3> velocities;
         [ReadOnly] public NativeArray<float> radii;
+        [ReadOnly] public NativeArray<int> sortedIdx;
+        [ReadOnly] public NativeArray<int> cellStart;
         public int count;
-        public float restitution;        // 0 = 完全非弾性、0.2 程度で落ち着いた反発
-        public float positionSlop;       // この量までの重なりは位置補正しない (ジッタ防止)
-        public float positionCorrection; // 位置補正の割合 (0.2〜0.5 推奨、1.0 は即時解消で振動しやすい)
+        public int gridWidth;
+        public int gridHeight;
+        public float cellSize;
+        public float2 gridOrigin;
+        public float restitution;
+        public float positionSlop;
+        public float positionCorrection;
 
         public void Execute()
         {
-            for (int i = 0; i < count - 1; i++)
+            for (int i = 0; i < count; i++)
             {
                 float3 pi = positions[i];
                 float3 vi = velocities[i];
                 float ri = radii[i];
-                for (int j = i + 1; j < count; j++)
+
+                int cx = (int)math.floor((pi.x - gridOrigin.x) / cellSize);
+                int cz = (int)math.floor((pi.z - gridOrigin.y) / cellSize);
+                cx = math.clamp(cx, 0, gridWidth - 1);
+                cz = math.clamp(cz, 0, gridHeight - 1);
+
+                int zMin = math.max(0, cz - 1);
+                int zMax = math.min(gridHeight - 1, cz + 1);
+                int xMin = math.max(0, cx - 1);
+                int xMax = math.min(gridWidth - 1, cx + 1);
+
+                for (int zz = zMin; zz <= zMax; zz++)
                 {
-                    float3 pj = positions[j];
-                    float3 vj = velocities[j];
-                    float rj = radii[j];
-                    float dx = pj.x - pi.x;
-                    float dz = pj.z - pi.z;
-                    float distSq = dx * dx + dz * dz;
-                    float minDist = ri + rj;
-                    if (distSq >= minDist * minDist || distSq < 1e-8f) continue;
-
-                    float dist = math.sqrt(distSq);
-                    float nx = dx / dist;
-                    float nz = dz / dist;
-
-                    // --- 位置補正 (スラックを超えた分のみ、緩和係数で少しずつ)
-                    float penetration = minDist - dist;
-                    float corr = math.max(0f, penetration - positionSlop) * positionCorrection * 0.5f;
-                    if (corr > 0f)
+                    int rowBase = zz * gridWidth;
+                    for (int xx = xMin; xx <= xMax; xx++)
                     {
-                        pi.x -= nx * corr;
-                        pi.z -= nz * corr;
-                        pj.x += nx * corr;
-                        pj.z += nz * corr;
-                    }
+                        int key = rowBase + xx;
+                        int start = cellStart[key];
+                        int end = cellStart[key + 1];
+                        for (int s = start; s < end; s++)
+                        {
+                            int j = sortedIdx[s];
+                            if (j <= i) continue;
+                            float3 pj = positions[j];
+                            float3 vj = velocities[j];
+                            float rj = radii[j];
+                            float dx = pj.x - pi.x;
+                            float dz = pj.z - pi.z;
+                            float distSq = dx * dx + dz * dz;
+                            float minDist = ri + rj;
+                            if (distSq >= minDist * minDist || distSq < 1e-8f) continue;
 
-                    // --- 速度補正 (接近成分だけ反発で反転)
-                    float rvx = vj.x - vi.x;
-                    float rvz = vj.z - vi.z;
-                    float velAlongNormal = rvx * nx + rvz * nz; // >0 なら離れつつある、<0 なら接近中
-                    if (velAlongNormal < 0f)
-                    {
-                        float jImpulse = -(1f + restitution) * velAlongNormal * 0.5f; // 等質量
-                        float ix = jImpulse * nx;
-                        float iz = jImpulse * nz;
-                        vi.x -= ix;
-                        vi.z -= iz;
-                        vj.x += ix;
-                        vj.z += iz;
-                    }
+                            float dist = math.sqrt(distSq);
+                            float nx = dx / dist;
+                            float nz = dz / dist;
 
-                    positions[j] = pj;
-                    velocities[j] = vj;
+                            float penetration = minDist - dist;
+                            float corr = math.max(0f, penetration - positionSlop) * positionCorrection * 0.5f;
+                            if (corr > 0f)
+                            {
+                                pi.x -= nx * corr;
+                                pi.z -= nz * corr;
+                                pj.x += nx * corr;
+                                pj.z += nz * corr;
+                            }
+
+                            float rvx = vj.x - vi.x;
+                            float rvz = vj.z - vi.z;
+                            float velAlongNormal = rvx * nx + rvz * nz;
+                            if (velAlongNormal < 0f)
+                            {
+                                float jImpulse = -(1f + restitution) * velAlongNormal * 0.5f;
+                                float ix = jImpulse * nx;
+                                float iz = jImpulse * nz;
+                                vi.x -= ix;
+                                vi.z -= iz;
+                                vj.x += ix;
+                                vj.z += iz;
+                            }
+
+                            positions[j] = pj;
+                            velocities[j] = vj;
+                        }
+                    }
                 }
                 positions[i] = pi;
                 velocities[i] = vi;

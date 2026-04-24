@@ -49,6 +49,9 @@ public class PinballBallController : MonoBehaviour
     public float manualBoundsXMax = 2.4257f;
     public float manualBoundsZMax = 4.468f;
 
+    [Tooltip("空間ハッシュの範囲下限 Z (壁としては作用せずグリッド最小値のみ)")]
+    public float manualBoundsZMin = -2f;
+
     [Header("ボール同士の衝突")]
     [Tooltip("gen ≥ 1 同士の位置分離 + 法線方向の弱い反発を行うか")]
     public bool enableBallBallCollision = true;
