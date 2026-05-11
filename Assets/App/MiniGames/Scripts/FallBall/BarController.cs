@@ -4,66 +4,70 @@ using UnityEngine.InputSystem;
 namespace MiniGames.FallBall
 {
     /// <summary>
-    /// 鉄球落としにおける2本の棒（レール）の操作を担うクラス。
-    /// - マウス移動: 棒全体を左右に移動
-    /// - スペースキー: 押下中は棒の間隔が広がり、離すと狭まる
+    /// 鉄球落としの棒（レール）と半透明操作オブジェクトの制御クラス。
+    /// - マウスで操作ハンドルをドラッグする
+    /// - ハンドルを奥（支点）へ押すとV字に開き、手前へ引くと閉じる
+    /// - ハンドルを左右へ動かすと、全体（棒とハンドル）が左右へ移動する
     /// </summary>
     public class BarController : MonoBehaviour
     {
-        [Header("Bars")]
-        [Tooltip("左側の棒のTransform")]
+        [Header("References")]
+        [Tooltip("左側の棒のTransform（原点が上部の支点にあること）")]
         [SerializeField] private Transform leftBar;
-        [Tooltip("右側の棒のTransform")]
+        [Tooltip("右側の棒のTransform（原点が上部の支点にあること）")]
         [SerializeField] private Transform rightBar;
+        [Tooltip("操作用の半透明のオブジェクト（ハンドルのTransform）")]
+        [SerializeField] private Transform operationHandle;
 
         [Header("Physics Settings")]
         [Tooltip("棒全体の移動を物理的に行うためのRigidbody（IsKinematic推奨）")]
         [SerializeField] private Rigidbody parentRigidbody;
 
-        [Header("Movement Settings (Mouse)")]
-        [Tooltip("マウス移動の感度")]
-        [SerializeField] private float mouseSensitivity = 0.05f;
-        [Tooltip("移動可能なX座標の最小値")]
+        [Header("Settings (Horizontal Movement)")]
+        [Tooltip("移動可能なX座標の最小値（左端）")]
         [SerializeField] private float minX = -5f;
-        [Tooltip("移動可能なX座標の最大値")]
+        [Tooltip("移動可能なX座標の最大値（右端）")]
         [SerializeField] private float maxX = 5f;
 
-        [Header("Opening Settings (V-Shape Space Key)")]
-        [Tooltip("根元の固定された隙間の広さ（ボールが転がる幅）")]
-        [SerializeField] private float baseGap = 1.0f;
-        [Tooltip("棒の最小角度（閉じた時）")]
-        [SerializeField] private float minAngle = 0.0f;
-        [Tooltip("棒の最大角度（最大に開いた時）")]
+        [Header("Settings (Opening Angle & Z Depth)")]
+        [Tooltip("支点（奥）に一番近いときのハンドルのローカルZ座標")]
+        [SerializeField] private float handleMinZ = 0.0f;
+        [Tooltip("一番手前にあるときのハンドルのローカルZ座標")]
+        [SerializeField] private float handleMaxZ = 5.0f;
+        [Tooltip("ハンドルが一番奥にある時（支点に近い時）のV字開き角度")]
         [SerializeField] private float maxAngle = 30.0f;
-        [Tooltip("角度が開く速度")]
-        [SerializeField] private float openingSpeed = 50.0f;
-        [Tooltip("角度が閉じる速度")]
-        [SerializeField] private float closingSpeed = 50.0f;
+        [Tooltip("ハンドルが一番手前にある時のV字開き角度（平行なら0）")]
+        [SerializeField] private float minAngle = 0.0f;
+        
+        [Header("Settings (Base Gap)")]
+        [Tooltip("支点での固定された隙間の広さ（ボールが転がる幅）")]
+        [SerializeField] private float baseGap = 1.0f;
 
-        private float currentX;
-        private float currentAngle;
+        private float currentBaseX;
         private bool isGameActive = true; 
         private bool isDragging = false;
+        
+        // ドラッグ開始時のベースとマウス位置とのズレを記憶
+        private float dragOffsetX; 
+        private float dragOffsetZ;
 
         void Start()
         {
             if (parentRigidbody == null) parentRigidbody = GetComponent<Rigidbody>();
             
-            // Auto check
             if (parentRigidbody != null && !parentRigidbody.isKinematic)
             {
-                Debug.LogWarning("BarController: parentRigidbody は isKinematic を true にすることを推奨します。");
+                Debug.LogWarning("BarController: parentRigidbody は IsKinematic=true に設定することを推奨します。");
             }
 
-            currentX = transform.position.x;
-            currentAngle = minAngle;
-            UpdateBarPositionsAndRotations();
+            currentBaseX = transform.position.x;
+            UpdateBarsState();
         }
 
         public void SetActive(bool active)
         {
             isGameActive = active;
-            if (!active) isDragging = false; // 非アクティブ時はドラッグ解除
+            if (!active) isDragging = false;
         }
 
         void Update()
@@ -71,31 +75,42 @@ namespace MiniGames.FallBall
             if (!isGameActive) return;
 
             HandleMouseInput();
-            HandleSpaceKeyOpening();
-            UpdateBarPositionsAndRotations();
+            UpdateBarsState();
         }
 
         private void HandleMouseInput()
         {
             if (Mouse.current == null || Camera.main == null) return;
 
-            // マウスクリックの瞬間
+            // マウスクリック開始
             if (Mouse.current.leftButton.wasPressedThisFrame)
             {
-                Vector2 mousePos = Mouse.current.position.ReadValue();
-                Ray ray = Camera.main.ScreenPointToRay(mousePos);
-
+                Ray ray = Camera.main.ScreenPointToRay(Mouse.current.position.ReadValue());
                 if (Physics.Raycast(ray, out RaycastHit hit))
                 {
-                    // クリックしたのが左棒・右棒、あるいは自身のいずれかだったらドラッグ開始
-                    if (hit.transform == leftBar || hit.transform == rightBar || hit.transform == transform || hit.transform.IsChildOf(transform))
+                    // クリックした対象が半透明ハンドル（operationHandle）か判定
+                    if (operationHandle != null && (hit.transform == operationHandle || hit.transform.IsChildOf(operationHandle)))
                     {
                         isDragging = true;
+
+                        // 傾斜面に対応した仮想平面（Plane）を作成してマウスの3D座標を取得
+                        Plane dragPlane = new Plane(transform.up, transform.position);
+                        if (dragPlane.Raycast(ray, out float enter))
+                        {
+                            Vector3 worldHitPoint = ray.GetPoint(enter);
+                            
+                            // クリックした位置と現在のベース位置(X)の差分を記録
+                            dragOffsetX = transform.position.x - worldHitPoint.x;
+                            
+                            // ハンドルの現在のZ位置と、クリックされたローカルZ位置の差分を記録
+                            Vector3 localHitPoint = transform.InverseTransformPoint(worldHitPoint);
+                            dragOffsetZ = operationHandle.localPosition.z - localHitPoint.z;
+                        }
                     }
                 }
             }
 
-            // マウス離した瞬間
+            // マウス離上
             if (Mouse.current.leftButton.wasReleasedThisFrame)
             {
                 isDragging = false;
@@ -105,58 +120,65 @@ namespace MiniGames.FallBall
         private void FixedUpdate()
         {
             // 物理演算（移動）はFixedUpdateで行う
-            if (isDragging && Mouse.current != null)
+            if (isDragging && Mouse.current != null && Camera.main != null && operationHandle != null)
             {
-                Vector2 mouseDelta = Mouse.current.delta.ReadValue();
-                
-                currentX += mouseDelta.x * mouseSensitivity;
-                currentX = Mathf.Clamp(currentX, minX, maxX);
-                
-                Vector3 newPos = transform.position;
-                newPos.x = currentX;
+                Ray ray = Camera.main.ScreenPointToRay(Mouse.current.position.ReadValue());
+                Plane dragPlane = new Plane(transform.up, transform.position);
 
-                if (parentRigidbody != null)
+                if (dragPlane.Raycast(ray, out float enter))
                 {
-                    // 物理に即した移動
-                    parentRigidbody.MovePosition(newPos);
-                }
-                else
-                {
-                    // Rigidbodyがない場合のフォールバック
-                    transform.position = newPos;
+                    Vector3 worldHitPoint = ray.GetPoint(enter);
+                    
+                    // --- 左右移動（ベース全体）の計算 ---
+                    // クリック時のオフセットを加味して、滑らかに追従させる
+                    currentBaseX = Mathf.Clamp(worldHitPoint.x + dragOffsetX, minX, maxX);
+                    
+                    Vector3 newPos = transform.position;
+                    newPos.x = currentBaseX;
+
+                    if (parentRigidbody != null)
+                    {
+                        parentRigidbody.MovePosition(newPos);
+                    }
+                    else
+                    {
+                        transform.position = newPos;
+                    }
+
+                    // --- 縦移動（ハンドルのZ軸移動）の計算 ---
+                    // マウス座標をベースのローカル座標系に変換
+                    Vector3 localHitPoint = transform.InverseTransformPoint(worldHitPoint);
+                    
+                    // ハンドルのZ移動先を計算して制限する
+                    float targetZ = localHitPoint.z + dragOffsetZ;
+                    float clampedZ = Mathf.Clamp(targetZ, handleMinZ, handleMaxZ);
+                    
+                    Vector3 handlePos = operationHandle.localPosition;
+                    handlePos.z = clampedZ;
+                    operationHandle.localPosition = handlePos;
                 }
             }
         }
 
-        private void HandleSpaceKeyOpening()
+        private void UpdateBarsState()
         {
-            if (Keyboard.current != null && Keyboard.current.spaceKey.isPressed)
-            {
-                // スペースキー押下中：角度を開く
-                currentAngle = Mathf.MoveTowards(currentAngle, maxAngle, openingSpeed * Time.deltaTime);
-            }
-            else
-            {
-                // スペースキー離上時：角度を狭める
-                currentAngle = Mathf.MoveTowards(currentAngle, minAngle, closingSpeed * Time.deltaTime);
-            }
-        }
+            if (leftBar == null || rightBar == null || operationHandle == null) return;
 
-        private void UpdateBarPositionsAndRotations()
-        {
-            if (leftBar != null && rightBar != null)
-            {
-                float halfBaseGap = baseGap / 2f;
+            // 支点からのハンドルの距離割合を計算 (0: 支点に一番近い, 1: 一番遠い)
+            float t = Mathf.InverseLerp(handleMinZ, handleMaxZ, operationHandle.localPosition.z);
+            
+            // 割合に応じて角度を決定（t=0 なら maxAngle[開く], t=1 なら minAngle[閉じる]）
+            float currentAngle = Mathf.Lerp(maxAngle, minAngle, t);
 
-                // 根元の隙間（localPosition）は常に固定する
-                leftBar.localPosition = new Vector3(-halfBaseGap, leftBar.localPosition.y, leftBar.localPosition.z);
-                rightBar.localPosition = new Vector3(halfBaseGap, rightBar.localPosition.y, rightBar.localPosition.z);
+            float halfBaseGap = baseGap / 2f;
 
-                // Y軸（またはZ軸）を中心にローカル回転させてV字にする
-                // ※棒が前(Z方向)に伸びている前提（Y軸中心で回転）
-                leftBar.localRotation = Quaternion.Euler(0, -currentAngle, 0);
-                rightBar.localRotation = Quaternion.Euler(0, currentAngle, 0);
-            }
+            // 左棒・右棒の根元の隙間（localPosition）を固定
+            leftBar.localPosition = new Vector3(-halfBaseGap, leftBar.localPosition.y, leftBar.localPosition.z);
+            rightBar.localPosition = new Vector3(halfBaseGap, rightBar.localPosition.y, rightBar.localPosition.z);
+
+            // Y軸を中心にローカル回転させてV字にする（奥が支点前提）
+            leftBar.localRotation = Quaternion.Euler(0, -currentAngle, 0);
+            rightBar.localRotation = Quaternion.Euler(0, currentAngle, 0);
         }
     }
 }
