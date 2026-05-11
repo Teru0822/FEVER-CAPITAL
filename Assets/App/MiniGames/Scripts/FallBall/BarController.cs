@@ -23,11 +23,13 @@ namespace MiniGames.FallBall
         [Tooltip("棒全体の移動を物理的に行うためのRigidbody（IsKinematic推奨）")]
         [SerializeField] private Rigidbody parentRigidbody;
 
-        [Header("Settings (Horizontal Movement)")]
-        [Tooltip("移動可能なX座標の最小値（左端）")]
-        [SerializeField] private float minX = -5f;
-        [Tooltip("移動可能なX座標の最大値（右端）")]
-        [SerializeField] private float maxX = 5f;
+        [Header("Settings (Rotation Aim)")]
+        [Tooltip("マウス左右移動による回転（エイム）の感度")]
+        [SerializeField] private float yawSensitivity = 0.2f;
+        [Tooltip("左方向への最大回転角度（ローカル）")]
+        [SerializeField] private float minYaw = -45f;
+        [Tooltip("右方向への最大回転角度（ローカル）")]
+        [SerializeField] private float maxYaw = 45f;
 
         [Header("Settings (Opening Angle & Z Depth)")]
         [Tooltip("支点（奥）に一番近いときのハンドルのローカルZ座標")]
@@ -43,12 +45,12 @@ namespace MiniGames.FallBall
         [Tooltip("支点での固定された隙間の広さ（ボールが転がる幅）")]
         [SerializeField] private float baseGap = 1.0f;
 
-        private float currentBaseX;
+        private float currentYaw = 0f;
+        private Quaternion initialRotation;
         private bool isGameActive = true; 
         private bool isDragging = false;
         
         // ドラッグ開始時のベースとマウス位置とのズレを記憶
-        private float dragOffsetX; 
         private float dragOffsetZ;
 
         void Start()
@@ -60,7 +62,8 @@ namespace MiniGames.FallBall
                 Debug.LogWarning("BarController: parentRigidbody は IsKinematic=true に設定することを推奨します。");
             }
 
-            currentBaseX = transform.position.x;
+            initialRotation = transform.localRotation;
+            currentYaw = 0f;
             UpdateBarsState();
         }
 
@@ -93,14 +96,10 @@ namespace MiniGames.FallBall
                     {
                         isDragging = true;
 
-                        // 傾斜面に対応した仮想平面（Plane）を作成してマウスの3D座標を取得
                         Plane dragPlane = new Plane(transform.up, transform.position);
                         if (dragPlane.Raycast(ray, out float enter))
                         {
                             Vector3 worldHitPoint = ray.GetPoint(enter);
-                            
-                            // クリックした位置と現在のベース位置(X)の差分を記録
-                            dragOffsetX = transform.position.x - worldHitPoint.x;
                             
                             // ハンドルの現在のZ位置と、クリックされたローカルZ位置の差分を記録
                             Vector3 localHitPoint = transform.InverseTransformPoint(worldHitPoint);
@@ -119,9 +118,27 @@ namespace MiniGames.FallBall
 
         private void FixedUpdate()
         {
-            // 物理演算（移動）はFixedUpdateで行う
+            // 物理演算（移動・回転）はFixedUpdateで行う
             if (isDragging && Mouse.current != null && Camera.main != null && operationHandle != null)
             {
+                // --- 左右操作（ベース全体の回転：エイム） ---
+                Vector2 mouseDelta = Mouse.current.delta.ReadValue();
+                currentYaw += mouseDelta.x * yawSensitivity;
+                currentYaw = Mathf.Clamp(currentYaw, minYaw, maxYaw);
+
+                Quaternion newRot = initialRotation * Quaternion.Euler(0, currentYaw, 0);
+
+                if (parentRigidbody != null)
+                {
+                    parentRigidbody.MoveRotation(newRot);
+                }
+                else
+                {
+                    transform.localRotation = newRot;
+                }
+
+                // --- 縦移動（ハンドルのZ軸移動）の計算 ---
+                // 回転後の状態でPlaneを再計算してズレを防ぐ
                 Ray ray = Camera.main.ScreenPointToRay(Mouse.current.position.ReadValue());
                 Plane dragPlane = new Plane(transform.up, transform.position);
 
@@ -129,23 +146,6 @@ namespace MiniGames.FallBall
                 {
                     Vector3 worldHitPoint = ray.GetPoint(enter);
                     
-                    // --- 左右移動（ベース全体）の計算 ---
-                    // クリック時のオフセットを加味して、滑らかに追従させる
-                    currentBaseX = Mathf.Clamp(worldHitPoint.x + dragOffsetX, minX, maxX);
-                    
-                    Vector3 newPos = transform.position;
-                    newPos.x = currentBaseX;
-
-                    if (parentRigidbody != null)
-                    {
-                        parentRigidbody.MovePosition(newPos);
-                    }
-                    else
-                    {
-                        transform.position = newPos;
-                    }
-
-                    // --- 縦移動（ハンドルのZ軸移動）の計算 ---
                     // マウス座標をベースのローカル座標系に変換
                     Vector3 localHitPoint = transform.InverseTransformPoint(worldHitPoint);
                     
