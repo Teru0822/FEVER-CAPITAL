@@ -39,6 +39,9 @@ public class UFOArmController : MonoBehaviour
     [Tooltip("逆に閉まる方向に動いてしまう指がある場合、ここのListにチェックを入れて反転させてください（0が001用、1が002用など）")]
     public bool[] invertFingerAngle;
 
+    [Tooltip("爪ごとの開く角度の微調整（X, Y, Z）。001と002が上にズレる場合などは、ここのYやZの数値を少し（-20〜20など）変えて手動で調整できます。")]
+    public Vector3[] fingerAngleOffsets;
+
     [Tooltip("指の開閉スピード")]
     public float fingerSpeed = 4f;
 
@@ -106,19 +109,32 @@ public class UFOArmController : MonoBehaviour
             _fingerDefaultRot = new Quaternion[fingerParts.Length];
             _fingerOpenRot    = new Quaternion[fingerParts.Length];
             _fingerCurrentBaseRot = new Quaternion[fingerParts.Length];
+            
+            // アームの中心位置（ここから外側に向かって開く）
+            Vector3 centerPos = (armRoot != null) ? armRoot.position : transform.position;
+
             for (int i = 0; i < fingerParts.Length; i++)
             {
                 if (fingerParts[i] == null) continue;
                 _fingerDefaultRot[i] = fingerParts[i].localRotation;
 
                 float angle = fingerOpenAngle;
-                // インバート指定があれば角度を反転
                 if (invertFingerAngle != null && i < invertFingerAngle.Length && invertFingerAngle[i])
                 {
                     angle = -fingerOpenAngle;
                 }
 
-                _fingerOpenRot[i]    = Quaternion.Euler(angle, 0f, 0f) * _fingerDefaultRot[i];
+                // 基本はX軸の角度
+                Vector3 euler = new Vector3(angle, 0f, 0f);
+
+                // もしInspectorで微調整の角度（fingerAngleOffsets）が設定されていれば足し合わせる
+                if (fingerAngleOffsets != null && i < fingerAngleOffsets.Length)
+                {
+                    euler += fingerAngleOffsets[i];
+                }
+
+                // 完全に「最初の直す前」の計算式に戻します（そこに微調整分だけ加算）
+                _fingerOpenRot[i]    = Quaternion.Euler(euler) * _fingerDefaultRot[i];
                 _fingerCurrentBaseRot[i] = _fingerDefaultRot[i];
             }
         }
@@ -330,7 +346,9 @@ public class UFOArmController : MonoBehaviour
                 _stateTimer -= Time.deltaTime;
                 if (_stateTimer <= 0f)
                 {
+                    Debug.Log("[UFOArmController] State changed: OpeningClaw -> Descending. Calling stretchRope.StartExternalDescent().");
                     _state = ArmState.Descending;
+                    if (stretchRope == null) Debug.LogError("[UFOArmController] stretchRope is NULL!");
                     stretchRope?.StartExternalDescent(descentSpeedMultiplier);
                 }
                 break;
@@ -339,6 +357,7 @@ public class UFOArmController : MonoBehaviour
                 // StretchRope が最大まで伸びたら「掴む」へ
                 if (stretchRope != null && stretchRope.IsAtMax())
                 {
+                    Debug.Log("[UFOArmController] State changed: Descending -> Grabbing. Rope is at Max.");
                     _state = ArmState.Grabbing;
                     _wantFingerOpen = false;
                     _stateTimer = grabWaitSeconds;
@@ -349,13 +368,19 @@ public class UFOArmController : MonoBehaviour
             case ArmState.Grabbing:
                 _stateTimer -= Time.deltaTime;
                 if (_stateTimer <= 0f)
+                {
+                    Debug.Log("[UFOArmController] State changed: Grabbing -> Ascending.");
                     _state = ArmState.Ascending;
+                }
                 break;
 
             case ArmState.Ascending:
                 // StretchRope が完全に縮んだら IDLE へ
                 if (stretchRope != null && stretchRope.IsAtMin())
+                {
+                    Debug.Log("[UFOArmController] State changed: Ascending -> Idle.");
                     _state = ArmState.Idle;
+                }
                 break;
         }
     }

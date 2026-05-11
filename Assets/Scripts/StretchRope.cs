@@ -138,6 +138,13 @@ public class StretchRope : MonoBehaviour
         }
         transform.localScale = newScale;
 
+        // デバッグ用ログ（1秒間に数回だけ出すように調整）
+        if (Time.frameCount % 60 == 0 && (_externalControl || _stretchTime > 0f))
+        {
+            Debug.Log($"[StretchRope] _stretchTime: {_stretchTime}, Scale: {newScale}, isExternal: {_externalControl}");
+        }
+
+
         // ── 回転による振り子運動のための準備 ──
         UFOArmController arm = FindAnyObjectByType<UFOArmController>();
         Quaternion ropeSwayRot = (arm != null) ? arm.ropeSwayRot : Quaternion.identity;
