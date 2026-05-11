@@ -45,6 +45,24 @@ public class UFOArmController : MonoBehaviour
     [Tooltip("指の開閉スピード")]
     public float fingerSpeed = 4f;
 
+    [Header("【新規】爪の開いた状態の直接指定")]
+    [Tooltip("チェックを入れると、下のリストの座標・角度を開いた状態として使用します")]
+    public bool useCustomOpenTransform = true;
+    
+    public Vector3[] customOpenLocalPositions = new Vector3[] {
+        new Vector3(0.5732661f, 0.9492433f, 3.3848f),
+        new Vector3(0.6466999f, 0.948375f, 3.315662f),
+        new Vector3(0.6466999f, 0.9295762f, 3.459017f),
+        new Vector3(0.7165977f, 0.9459755f, 3.3848f)
+    };
+    
+    public Vector3[] customOpenLocalRotations = new Vector3[] {
+        new Vector3(-124.606f, 90f, 0f),
+        new Vector3(-122.817f, 0f, 0f),
+        new Vector3(-52.183f, 0f, 0f),
+        new Vector3(-56.53f, 90f, 0f)
+    };
+
     // ─────────────────────────────────────
     [Header("昇降設定")]
     [Tooltip("自動下降時の StretchRope の速度倍率")]
@@ -56,11 +74,19 @@ public class UFOArmController : MonoBehaviour
     private ArmState _state = ArmState.Idle;
     private Vector2  _leverInput;
     private Vector3  _armInitialPos;
+    private Vector3  _rail1InitialPos;
+    private Vector3  _rail2InitialPos;
+    private Vector3  _visualOffset; // ピボットと実際の見た目の中心（ロープ）とのズレ
     private float    _stateTimer; // 様々な待機タイマー兼用
 
     private Quaternion[] _fingerDefaultRot;
     private Quaternion[] _fingerOpenRot;
     private Quaternion[] _fingerCurrentBaseRot; // 開閉の純粋な回転を保持
+
+    private Vector3[] _fingerDefaultPos;
+    private Vector3[] _fingerOpenPos;
+    private Vector3[] _fingerCurrentBasePos; // 開閉の純粋な座標を保持
+
     private bool         _wantFingerOpen = false;
 
     // ─────────────────────────────────────
@@ -102,40 +128,60 @@ public class UFOArmController : MonoBehaviour
     void Start()
     {
         if (armRoot != null) _armInitialPos = armRoot.position;
+        if (armRoot != null && stretchRope != null)
+        {
+            // armRoot（ピボット）と実際の見た目の中心（ロープ）のズレを計算
+            _visualOffset = stretchRope.transform.position - armRoot.position;
+        }
+        else
+        {
+            _visualOffset = Vector3.zero;
+        }
 
-        // 爪の初期/開いた回転を記録
+        // 爪の初期/開いた回転と座標を記録
         if (fingerParts != null && fingerParts.Length > 0)
         {
             _fingerDefaultRot = new Quaternion[fingerParts.Length];
             _fingerOpenRot    = new Quaternion[fingerParts.Length];
             _fingerCurrentBaseRot = new Quaternion[fingerParts.Length];
-            
-            // アームの中心位置（ここから外側に向かって開く）
-            Vector3 centerPos = (armRoot != null) ? armRoot.position : transform.position;
 
+            _fingerDefaultPos = new Vector3[fingerParts.Length];
+            _fingerOpenPos = new Vector3[fingerParts.Length];
+            _fingerCurrentBasePos = new Vector3[fingerParts.Length];
+            
             for (int i = 0; i < fingerParts.Length; i++)
             {
                 if (fingerParts[i] == null) continue;
                 _fingerDefaultRot[i] = fingerParts[i].localRotation;
-
-                float angle = fingerOpenAngle;
-                if (invertFingerAngle != null && i < invertFingerAngle.Length && invertFingerAngle[i])
-                {
-                    angle = -fingerOpenAngle;
-                }
-
-                // 基本はX軸の角度
-                Vector3 euler = new Vector3(angle, 0f, 0f);
-
-                // もしInspectorで微調整の角度（fingerAngleOffsets）が設定されていれば足し合わせる
-                if (fingerAngleOffsets != null && i < fingerAngleOffsets.Length)
-                {
-                    euler += fingerAngleOffsets[i];
-                }
-
-                // 完全に「最初の直す前」の計算式に戻します（そこに微調整分だけ加算）
-                _fingerOpenRot[i]    = Quaternion.Euler(euler) * _fingerDefaultRot[i];
+                _fingerDefaultPos[i] = fingerParts[i].localPosition;
+                
                 _fingerCurrentBaseRot[i] = _fingerDefaultRot[i];
+                _fingerCurrentBasePos[i] = _fingerDefaultPos[i];
+
+                if (useCustomOpenTransform && i < customOpenLocalPositions.Length && i < customOpenLocalRotations.Length)
+                {
+                    // 個別の座標・角度を直接指定
+                    _fingerOpenPos[i] = customOpenLocalPositions[i];
+                    _fingerOpenRot[i] = Quaternion.Euler(customOpenLocalRotations[i]);
+                }
+                else
+                {
+                    // 従来の角度計算（座標は動かさない）
+                    _fingerOpenPos[i] = _fingerDefaultPos[i];
+                    
+                    float angle = fingerOpenAngle;
+                    if (invertFingerAngle != null && i < invertFingerAngle.Length && invertFingerAngle[i])
+                    {
+                        angle = -fingerOpenAngle;
+                    }
+
+                    Vector3 euler = new Vector3(angle, 0f, 0f);
+                    if (fingerAngleOffsets != null && i < fingerAngleOffsets.Length)
+                    {
+                        euler += fingerAngleOffsets[i];
+                    }
+                    _fingerOpenRot[i] = Quaternion.Euler(euler) * _fingerDefaultRot[i];
+                }
             }
         }
 
@@ -162,6 +208,8 @@ public class UFOArmController : MonoBehaviour
         }
 
         if (armRoot != null) _lastWorldPos = armRoot.position;
+        if (rail1 != null) _rail1InitialPos = rail1.position;
+        if (rail2 != null) _rail2InitialPos = rail2.position;
     }
 
     // ─────────────────────────────────────
@@ -204,11 +252,17 @@ public class UFOArmController : MonoBehaviour
         pos.x += _leverInput.x * moveSpeed * Time.deltaTime;
         pos.z += _leverInput.y * moveSpeed * Time.deltaTime;
 
+        // ピボットではなく、「実際の見た目の中心座標（visualPos）」を算出してClamp判定を行う
+        Vector3 visualPos = pos + _visualOffset;
+
         // 手動で設定した赤い枠(Gizmos)の範囲内に強制クリップ
         float halfX = playAreaSize.x / 2f;
         float halfZ = playAreaSize.y / 2f;
-        pos.x = Mathf.Clamp(pos.x, playAreaCenter.x - halfX, playAreaCenter.x + halfX);
-        pos.z = Mathf.Clamp(pos.z, playAreaCenter.y - halfZ, playAreaCenter.y + halfZ);
+        visualPos.x = Mathf.Clamp(visualPos.x, playAreaCenter.x - halfX, playAreaCenter.x + halfX);
+        visualPos.z = Mathf.Clamp(visualPos.z, playAreaCenter.y - halfZ, playAreaCenter.y + halfZ);
+
+        // Clampされた見た目の座標から、再びピボットの座標を逆算して適用する
+        pos = visualPos - _visualOffset;
 
         armRoot.position = pos;
         
@@ -254,19 +308,22 @@ public class UFOArmController : MonoBehaviour
     {
         if (armRoot == null) return;
 
+        // アームが初期位置からどれだけ移動したか（差分）を計算
+        Vector3 delta = armRoot.position - _armInitialPos;
+
         // Rail1: 左右（X方向）移動をアームに合わせる
         if (rail1 != null)
         {
-            Vector3 p = rail1.position;
-            p.x = armRoot.position.x;
+            Vector3 p = _rail1InitialPos;
+            p.x += delta.x;
             rail1.position = p;
         }
 
         // Rail2: 上下・奥手前（Z方向）移動をアームに合わせる
         if (rail2 != null)
         {
-            Vector3 p = rail2.position;
-            p.z = armRoot.position.z;
+            Vector3 p = _rail2InitialPos;
+            p.z += delta.z;
             rail2.position = p;
         }
     }
@@ -282,11 +339,15 @@ public class UFOArmController : MonoBehaviour
 
                 // 開閉アニメーションの補間（純粹なローカル状態）
                 Quaternion targetBaseRot = _wantFingerOpen ? _fingerOpenRot[i] : _fingerDefaultRot[i];
-                _fingerCurrentBaseRot[i] = Quaternion.Lerp(_fingerCurrentBaseRot[i], targetBaseRot, Time.deltaTime * fingerSpeed);
+                Vector3 targetBasePos = _wantFingerOpen ? _fingerOpenPos[i] : _fingerDefaultPos[i];
 
-                // 1. 純粋なローカル回転（開閉）のみをセットする。
-                // 1. 純粋なローカル回転（開閉）をセット
+                _fingerCurrentBaseRot[i] = Quaternion.Lerp(_fingerCurrentBaseRot[i], targetBaseRot, Time.deltaTime * fingerSpeed);
+                _fingerCurrentBasePos[i] = Vector3.Lerp(_fingerCurrentBasePos[i], targetBasePos, Time.deltaTime * fingerSpeed);
+
+                // 1. 純粋なローカル回転と座標（開閉）をセット
                 fingerParts[i].localRotation = _fingerCurrentBaseRot[i];
+                fingerParts[i].localPosition = _fingerCurrentBasePos[i];
+
                 // 2. 爪用の個別揺れを適用
                 fingerParts[i].rotation = clawSwayRot * fingerParts[i].rotation;
             }
