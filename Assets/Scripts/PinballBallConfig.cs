@@ -117,6 +117,33 @@ public class PinballBallConfig : MonoBehaviour
     [Tooltip("ポップ演出の長さ (秒)")]
     public float moneyPopDuration = 0.35f;
 
+    [Header("分裂エフェクト (火花 + 効果音)")]
+    [Tooltip("分裂時に短く再生する火花用 ParticleSystem プレハブ (小さめ・短命推奨)。null なら火花なし。")]
+    public ParticleSystem sparkParticlePrefab;
+
+    [Tooltip("分裂時に鳴らす効果音 (シャン)。null なら無音。")]
+    public AudioClip splitSfxClip;
+
+    [Range(0f, 1f)]
+    [Tooltip("効果音の音量")]
+    public float splitSfxVolume = 0.4f;
+
+    [Range(0f, 0.5f)]
+    [Tooltip("再生ピッチのランダム変動幅 (0 で固定)。±この値で揺らがせて単調感を消す。")]
+    public float splitSfxPitchVariance = 0.15f;
+
+    [Min(1)]
+    [Tooltip("AudioSource プールサイズ (同時発音数の上限)")]
+    public int sfxPoolSize = 16;
+
+    [Min(0)]
+    [Tooltip("1 フレームあたりの最大発音数 (0 で無制限)。多すぎる時はランダムに間引かれる。")]
+    public int maxSfxPerFrame = 6;
+
+    [Min(0)]
+    [Tooltip("1 フレームあたりの最大火花生成数 (0 で無制限)")]
+    public int maxSparksPerFrame = 12;
+
     [Header("リセット")]
     [Tooltip("このキーを押すと現在のシーンを再ロードしてゲームを初期化する")]
     public KeyCode resetKey = KeyCode.R;

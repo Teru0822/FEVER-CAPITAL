@@ -289,6 +289,9 @@ public class PinballBallManager : MonoBehaviour
         EnsureConfigured(source);
         if (!_floorYSet) SetFloorY(collisionPos.y - gen0SphereRadius);
 
+        // 分裂エフェクト (火花 + 効果音)
+        if (PinballSplitFXManager.Instance != null) PinballSplitFXManager.Instance.OnSplit(collisionPos);
+
         int nextGen = 1;
         if (_particleGeneration >= 0 && nextGen >= _particleGeneration && _splitParticlePrefab != null)
         {
@@ -620,9 +623,13 @@ public class PinballBallManager : MonoBehaviour
         float parentRadius = _radii[index];
         int hitSplitterIdx = _splitterHitIdx[index];
 
+        // 分裂エフェクト (火花 + 効果音)
+        Vector3 worldParentPos = new Vector3(parentPos.x, parentPos.y, parentPos.z);
+        if (PinballSplitFXManager.Instance != null) PinballSplitFXManager.Instance.OnSplit(worldParentPos);
+
         if (_particleGeneration >= 0 && nextGen >= _particleGeneration && _splitParticlePrefab != null)
         {
-            SpawnParticleBurst(new Vector3(parentPos.x, parentPos.y, parentPos.z));
+            SpawnParticleBurst(worldParentPos);
             DestroyAt(index);
             return;
         }
