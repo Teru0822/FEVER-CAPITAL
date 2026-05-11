@@ -20,19 +20,26 @@ public class UFOClawCollisionDetector : MonoBehaviour
 
     private void OnCollisionEnter(Collision collision)
     {
-        // ぶつかった時にコントローラーへ通知する
-        if (armController != null)
-        {
-            armController.OnClawCollided();
-        }
+        if (armController == null) return;
+
+        // 爪同士やUFOキャッチャー本体との衝突は無視する
+        if (collision.transform.IsChildOf(armController.transform.root))
+            return;
+
+        Debug.Log($"[UFOClawCollisionDetector] Collided with: {collision.gameObject.name}");
+        armController.OnClawCollided(); 
     }
 
     // IsTrigger にチェックを入れている場合（すり抜けながら検知したい場合）はこちらが呼ばれる
     private void OnTriggerEnter(Collider other)
     {
-        if (armController != null)
-        {
-            armController.OnClawCollided();
-        }
+        if (armController == null) return;
+
+        // 爪同士やUFOキャッチャー本体との衝突は無視する
+        if (other.transform.IsChildOf(armController.transform.root))
+            return;
+
+        Debug.Log($"[UFOClawCollisionDetector] Triggered with: {other.gameObject.name}");
+        armController.OnClawCollided(); 
     }
 }
