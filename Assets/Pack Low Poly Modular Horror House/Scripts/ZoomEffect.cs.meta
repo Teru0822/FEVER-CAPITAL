@@ -1,0 +1,18 @@
+fileFormatVersion: 2
+guid: c7d6c358c0ea1e94fb44300d3e1a8828
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 234574
+  packageName: Horror House Low Poly Modular Pack
+  packageVersion: 1.0
+  assetPath: Assets/Pack Low Poly Modular Horror House/Scripts/ZoomEffect.cs
+  uploadId: 541085

@@ -1,0 +1,18 @@
+fileFormatVersion: 2
+guid: e4fd13e4163cae245b43a6f547ff2d0c
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 234574
+  packageName: Horror House Low Poly Modular Pack
+  packageVersion: 1.0
+  assetPath: Assets/Pack Low Poly Modular Horror House/Scripts/LookAt.cs
+  uploadId: 541085
