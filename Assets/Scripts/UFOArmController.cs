@@ -6,7 +6,7 @@ using UnityEngine;
 /// </summary>
 public class UFOArmController : MonoBehaviour
 {
-    public enum ArmState { Idle, Moving, OpeningClaw, Descending, Grabbing, Ascending }
+    public enum ArmState { Idle, Moving, OpeningClaw, Descending, PostCollisionDescending, Grabbing, Ascending }
 
     // ─────────────────────────────────────
     [Header("アーム参照")]
@@ -69,6 +69,15 @@ public class UFOArmController : MonoBehaviour
     public float descentSpeedMultiplier = 1.5f;
     [Tooltip("掴んでから上昇を開始するまでの待機秒数")]
     public float grabWaitSeconds = 0.5f;
+    [Tooltip("何かにぶつかった後、さらに下降を続ける秒数（コインをしっかり掴むため）")]
+    public float postCollisionDescentSeconds = 0.15f;
+
+    [Header("コイン最適化解除（WakeUp）設定")]
+    [Tooltip("アームが下降する際、どれくらいの範囲のコインを叩き起こすか")]
+    public float wakeUpRadius = 1.0f;
+    [Tooltip("叩き起こし処理を実行する間隔（秒）。処理落ちを防ぐため毎フレームは行いません")]
+    public float wakeUpInterval = 0.2f;
+
     // ─────────────────────────────────────
     // 内部状態
     private ArmState _state = ArmState.Idle;
@@ -78,6 +87,7 @@ public class UFOArmController : MonoBehaviour
     private Vector3  _rail2InitialPos;
     private Vector3  _visualOffset; // ピボットと実際の見た目の中心（ロープ）とのズレ
     private float    _stateTimer; // 様々な待機タイマー兼用
+    private float    _wakeUpTimer;
 
     private Quaternion[] _fingerDefaultRot;
     private Quaternion[] _fingerOpenRot;
@@ -238,12 +248,44 @@ public class UFOArmController : MonoBehaviour
         UpdateRailFollow();
         UpdateFingersAndSway();
         UpdateStateMachine();
+        WakeUpNearbyCoins();
+    }
+
+    // アーム周辺の「最適化で凍結(Kinematic)したコイン」を叩き起こす
+    void WakeUpNearbyCoins()
+    {
+        // 処理落ちを防ぐため、常に実行するのではなく一定時間ごと（例: 0.2秒ごと）に実行する
+        _wakeUpTimer -= Time.deltaTime;
+        if (_wakeUpTimer > 0f) return;
+        _wakeUpTimer = wakeUpInterval;
+
+        // 下降中、および掴み動作の時のみコインを起こす（横移動中などは不要）
+        if (_state == ArmState.Descending || _state == ArmState.PostCollisionDescending || _state == ArmState.Grabbing)
+        {
+            Vector3 centerPos = (armRoot != null) ? armRoot.position : transform.position;
+            if (fingerParts != null && fingerParts.Length > 0 && fingerParts[0] != null)
+            {
+                centerPos = fingerParts[0].position;
+            }
+
+            // インスペクターで設定した範囲内のコインを起こす
+            Collider[] hits = Physics.OverlapSphere(centerPos, wakeUpRadius);
+            foreach (var hit in hits)
+            {
+                CoinOptimizer coin = hit.GetComponent<CoinOptimizer>();
+                if (coin != null)
+                {
+                    coin.WakeUp();
+                }
+            }
+        }
     }
 
     void UpdateMovement()
     {
         // 下降中・掴み中・上昇中はXZ移動しない
         if (_state == ArmState.Descending ||
+            _state == ArmState.PostCollisionDescending ||
             _state == ArmState.Grabbing   ||
             _state == ArmState.Ascending) return;
         if (armRoot == null) return;
@@ -379,22 +421,13 @@ public class UFOArmController : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// 当たり判定スクリプト（UFOClawCollisionDetector）から「何かにぶつかった」時に呼ばれる
-    /// </summary>
     public void OnClawCollided()
     {
-        // 下降中に景品や床にぶつかったら、最大まで伸びきるのを待たずに強制的に「掴む＆上昇」へ移行する
+        // 下降中に景品や床にぶつかったら、すぐに上昇せずに少しだけ下降を継続する
         if (_state == ArmState.Descending)
         {
-            _state = ArmState.Grabbing;
-            _wantFingerOpen = false;
-            _stateTimer = grabWaitSeconds; // 少し待ってから上昇する
-            
-            if (stretchRope != null)
-            {
-                stretchRope.StartExternalAscent(descentSpeedMultiplier);
-            }
+            _state = ArmState.PostCollisionDescending;
+            _stateTimer = postCollisionDescentSeconds;
         }
     }
 
@@ -422,7 +455,21 @@ public class UFOArmController : MonoBehaviour
                     _state = ArmState.Grabbing;
                     _wantFingerOpen = false;
                     _stateTimer = grabWaitSeconds;
-                    stretchRope.StartExternalAscent(descentSpeedMultiplier);
+                    if (stretchRope != null) stretchRope.PauseExternalControl(); // 掴み中はピタッと停止
+                }
+                break;
+
+            case ArmState.PostCollisionDescending:
+                // 少しだけ下降を継続する
+                _stateTimer -= Time.deltaTime;
+                if (_stateTimer <= 0f || (stretchRope != null && stretchRope.IsAtMax()))
+                {
+                    Debug.Log("[UFOArmController] State changed: PostCollisionDescending -> Grabbing.");
+                    _state = ArmState.Grabbing;
+                    _wantFingerOpen = false;
+                    _stateTimer = grabWaitSeconds;
+                    
+                    if (stretchRope != null) stretchRope.PauseExternalControl(); // 掴み中はピタッと停止
                 }
                 break;
 
@@ -432,6 +479,7 @@ public class UFOArmController : MonoBehaviour
                 {
                     Debug.Log("[UFOArmController] State changed: Grabbing -> Ascending.");
                     _state = ArmState.Ascending;
+                    if (stretchRope != null) stretchRope.StartExternalAscent(descentSpeedMultiplier);
                 }
                 break;
 

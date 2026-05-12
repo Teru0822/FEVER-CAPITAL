@@ -28,23 +28,28 @@ public class CoinOptimizer : MonoBehaviour
         // Kinematicになるまで、1秒に1回だけループし続ける
         while (!rb.isKinematic)
         {
-            // 条件A: 速度がほぼゼロか？（sqrMagnitudeは計算が軽いので最適）
+            // 速度がほぼゼロ（完全に止まった）か？
             if (rb.linearVelocity.sqrMagnitude < sleepVelocity)
             {
-                // 条件B: 真上に別のコインが乗っているか？（Raycastで上に向かって見えないビームを撃つ）
-                // transform.up ではなく Vector3.up にすることで、コインが傾いていても「絶対的な真上」を調べます
-                if (Physics.Raycast(transform.position, Vector3.up, out RaycastHit hit, coinThickness * 2f))
-                {
-                    // 上に何かが被さっているなら、自分はもう動かなくていい！
-                    rb.isKinematic = true;
-                    
-                    // ※ループを抜けて、このコルーチン（定期確認）自体を完全に終了させる
-                    yield break; 
-                }
+                // 止まっていれば無条件でKinematic（凍結）にして計算を止める！
+                rb.isKinematic = true;
+                
+                // ループを抜けて、定期確認コルーチン自体を終了させる
+                yield break; 
             }
 
             // 1秒休んでから再確認
             yield return wait;
+        }
+    }
+
+    // アームが近づいた時に外部から叩き起こすための処理
+    public void WakeUp()
+    {
+        if (rb != null && rb.isKinematic)
+        {
+            rb.isKinematic = false;
+            StartCoroutine(CheckAndFreezeRoutine(1.0f));
         }
     }
 }

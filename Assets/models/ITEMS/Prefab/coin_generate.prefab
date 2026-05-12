@@ -9,8 +9,16 @@ PrefabInstance:
     m_TransformParent: {fileID: 0}
     m_Modifications:
     - target: {fileID: -8679921383154817045, guid: d8d80673ed7bc0f42a8a8a85817ef3c1, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 5
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: d8d80673ed7bc0f42a8a8a85817ef3c1, type: 3}
       propertyPath: m_LocalScale.y
-      value: 7.520088
+      value: 5
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: d8d80673ed7bc0f42a8a8a85817ef3c1, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 5
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: d8d80673ed7bc0f42a8a8a85817ef3c1, type: 3}
       propertyPath: m_LocalPosition.x
@@ -54,7 +62,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 919132149155446097, guid: d8d80673ed7bc0f42a8a8a85817ef3c1, type: 3}
       propertyPath: m_Name
-      value: coin
+      value: coin_generate
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -83,7 +91,7 @@ Rigidbody:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 5092404432649901569}
   serializedVersion: 5
-  m_Mass: 0.005
+  m_Mass: 0.5
   m_LinearDamping: 0.3
   m_AngularDamping: 0.3
   m_CenterOfMass: {x: 0, y: 0, z: 0}
@@ -109,7 +117,7 @@ MeshCollider:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 5092404432649901569}
-  m_Material: {fileID: 0}
+  m_Material: {fileID: 13400000, guid: b71bca0c3db850943904da9b02355579, type: 2}
   m_IncludeLayers:
     serializedVersion: 2
     m_Bits: 0

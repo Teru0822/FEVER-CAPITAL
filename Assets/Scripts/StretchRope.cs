@@ -94,6 +94,13 @@ public class StretchRope : MonoBehaviour
         _externalDir     = 0f;
     }
 
+    /// <summary>外部制御のまま、昇降を一時停止する</summary>
+    public void PauseExternalControl()
+    {
+        _externalControl = true;
+        _externalDir     = 0f;
+    }
+
     /// <summary>最大まで伸びているか</summary>
     public bool IsAtMax() => _stretchTime >= 1f;
 
