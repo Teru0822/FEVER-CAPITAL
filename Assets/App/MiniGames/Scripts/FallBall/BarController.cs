@@ -9,6 +9,7 @@ namespace MiniGames.FallBall
     /// - ハンドルを奥（支点）へ押すとV字に開き、手前へ引くと閉じる
     /// - ハンドルを左右へ動かすと、全体（棒とハンドル）が左右へ移動する
     /// </summary>
+    [ExecuteAlways]
     public class BarController : MonoBehaviour
     {
         [Header("References")]
@@ -55,15 +56,18 @@ namespace MiniGames.FallBall
 
         void Start()
         {
-            if (parentRigidbody == null) parentRigidbody = GetComponent<Rigidbody>();
-            
-            if (parentRigidbody != null && !parentRigidbody.isKinematic)
+            if (Application.isPlaying)
             {
-                Debug.LogWarning("BarController: parentRigidbody は IsKinematic=true に設定することを推奨します。");
-            }
+                if (parentRigidbody == null) parentRigidbody = GetComponent<Rigidbody>();
+                
+                if (parentRigidbody != null && !parentRigidbody.isKinematic)
+                {
+                    Debug.LogWarning("BarController: parentRigidbody は IsKinematic=true に設定することを推奨します。");
+                }
 
-            initialRotation = transform.localRotation;
-            currentYaw = 0f;
+                initialRotation = transform.localRotation;
+                currentYaw = 0f;
+            }
             UpdateBarsState();
         }
 
@@ -77,7 +81,10 @@ namespace MiniGames.FallBall
         {
             if (!isGameActive) return;
 
-            HandleMouseInput();
+            if (Application.isPlaying)
+            {
+                HandleMouseInput();
+            }
             UpdateBarsState();
         }
 
@@ -89,22 +96,34 @@ namespace MiniGames.FallBall
             if (Mouse.current.leftButton.wasPressedThisFrame)
             {
                 Ray ray = Camera.main.ScreenPointToRay(Mouse.current.position.ReadValue());
-                if (Physics.Raycast(ray, out RaycastHit hit))
+                
+                // RaycastAllを使用して、他の透明なコライダーに遮られても貫通して判定する
+                RaycastHit[] hits = Physics.RaycastAll(ray);
+                bool hitHandle = false;
+                Vector3 hitPoint = Vector3.zero;
+
+                foreach (var hit in hits)
                 {
-                    // クリックした対象が半透明ハンドル（operationHandle）か判定
                     if (operationHandle != null && (hit.transform == operationHandle || hit.transform.IsChildOf(operationHandle)))
                     {
-                        isDragging = true;
+                        hitHandle = true;
+                        hitPoint = hit.point;
+                        break; // ハンドルが見つかったら終了
+                    }
+                }
 
-                        Plane dragPlane = new Plane(transform.up, transform.position);
-                        if (dragPlane.Raycast(ray, out float enter))
-                        {
-                            Vector3 worldHitPoint = ray.GetPoint(enter);
-                            
-                            // ハンドルの現在のZ位置と、クリックされたローカルZ位置の差分を記録
-                            Vector3 localHitPoint = transform.InverseTransformPoint(worldHitPoint);
-                            dragOffsetZ = operationHandle.localPosition.z - localHitPoint.z;
-                        }
+                if (hitHandle)
+                {
+                    isDragging = true;
+
+                    Plane dragPlane = new Plane(transform.up, transform.position);
+                    if (dragPlane.Raycast(ray, out float enter))
+                    {
+                        Vector3 worldHitPoint = ray.GetPoint(enter);
+                        
+                        // クリックした位置と現在のベース位置(X)の差分を記録
+                        // ※ドラッグ開始時のワールドヒットポイントと実際のベースX座標の差を計算するロジックに変更
+                        dragOffsetZ = operationHandle.localPosition.z - transform.InverseTransformPoint(worldHitPoint).z;
                     }
                 }
             }
@@ -179,6 +198,22 @@ namespace MiniGames.FallBall
             // Y軸を中心にローカル回転させてV字にする（奥が支点前提）
             leftBar.localRotation = Quaternion.Euler(0, -currentAngle, 0);
             rightBar.localRotation = Quaternion.Euler(0, currentAngle, 0);
+        }
+
+        // ピボット（支点）の位置をエディタ上で可視化する
+        private void OnDrawGizmos()
+        {
+            Gizmos.color = Color.red;
+            if (leftBar != null)
+            {
+                Gizmos.DrawSphere(leftBar.position, 0.1f);
+                Gizmos.DrawRay(leftBar.position, leftBar.forward * 2f);
+            }
+            if (rightBar != null)
+            {
+                Gizmos.DrawSphere(rightBar.position, 0.1f);
+                Gizmos.DrawRay(rightBar.position, rightBar.forward * 2f);
+            }
         }
     }
 }
