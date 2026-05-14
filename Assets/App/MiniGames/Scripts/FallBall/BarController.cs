@@ -31,6 +31,8 @@ namespace MiniGames.FallBall
         [SerializeField] private float minYaw = -45f;
         [Tooltip("右方向への最大回転角度（ローカル）")]
         [SerializeField] private float maxYaw = 45f;
+        [Tooltip("エイムの左右の動きが逆だと感じる場合はチェックを入れてください")]
+        [SerializeField] private bool invertAimDirection = false;
 
         [Header("Settings (Opening Angle & Z Depth)")]
         [Tooltip("支点（奥）に一番近いときのハンドルのローカルZ座標")]
@@ -160,7 +162,10 @@ namespace MiniGames.FallBall
             {
                 // --- 左右操作（ベース全体の回転：エイム） ---
                 Vector2 mouseDelta = Mouse.current.delta.ReadValue();
-                currentYaw += mouseDelta.x * yawSensitivity;
+                float yawChange = mouseDelta.x * yawSensitivity;
+                if (invertAimDirection) yawChange = -yawChange;
+                
+                currentYaw += yawChange;
                 currentYaw = Mathf.Clamp(currentYaw, minYaw, maxYaw);
 
                 // もしRigidbodyがない場合は即座に回転（ある場合はFixedUpdateでMoveRotation）
@@ -180,14 +185,15 @@ namespace MiniGames.FallBall
                     
                     float targetZ = localHitPoint.z + dragOffsetZ;
                     
-                    // Inspectorの HandleMaxZ が小さすぎる場合にワープするのを防ぐ
-                    float effectiveMaxZ = Mathf.Max(handleMaxZ, operationHandle.localPosition.z);
-                    float effectiveMinZ = Mathf.Min(handleMinZ, operationHandle.localPosition.z);
-                    float clampedZ = Mathf.Clamp(targetZ, effectiveMinZ, effectiveMaxZ);
+                    // 単純にMinとMaxの間で制限する（ラチェット現象の解消）
+                    float clampedZ = Mathf.Clamp(targetZ, handleMinZ, handleMaxZ);
                     
                     Vector3 handlePos = operationHandle.localPosition;
                     handlePos.z = clampedZ;
                     operationHandle.localPosition = handlePos;
+
+                    // 親にRigidbodyがある状態で子オブジェクトを動かすと当たり判定が取り残される問題の修正
+                    Physics.SyncTransforms();
                 }
             }
         }
