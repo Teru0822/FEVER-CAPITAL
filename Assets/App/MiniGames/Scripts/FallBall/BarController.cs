@@ -41,6 +41,8 @@ namespace MiniGames.FallBall
         [SerializeField] private float maxAngle = 30.0f;
         [Tooltip("ハンドルが一番手前にある時のV字開き角度（平行なら0）")]
         [SerializeField] private float minAngle = 0.0f;
+        [Tooltip("棒の開く向きが逆（交差してしまう等）の場合はチェックを入れてください")]
+        [SerializeField] private bool invertBarRotation = false;
         
         [Header("Settings (Base Gap)")]
         [Tooltip("支点での固定された隙間の広さ（ボールが転がる幅）")]
@@ -100,16 +102,24 @@ namespace MiniGames.FallBall
                 // RaycastAllを使用して、他の透明なコライダーに遮られても貫通して判定する
                 RaycastHit[] hits = Physics.RaycastAll(ray);
                 bool hitHandle = false;
-                Vector3 hitPoint = Vector3.zero;
 
                 foreach (var hit in hits)
                 {
                     if (operationHandle != null && (hit.transform == operationHandle || hit.transform.IsChildOf(operationHandle)))
                     {
                         hitHandle = true;
-                        hitPoint = hit.point;
+                        Debug.Log("BarController: ハンドルのクリックを検知しました！");
                         break; // ハンドルが見つかったら終了
                     }
+                }
+
+                if (!hitHandle && hits.Length > 0)
+                {
+                    Debug.Log($"BarController: クリックしましたがハンドルには当たりませんでした。（当たったもの: {hits[0].transform.name}）\n※ハンドルにColliderが付いているか確認してください。");
+                }
+                else if (!hitHandle)
+                {
+                    Debug.Log("BarController: クリックしましたが何も当たりませんでした。\n※MainCameraタグが設定されているか確認してください。");
                 }
 
                 if (hitHandle)
@@ -191,13 +201,13 @@ namespace MiniGames.FallBall
 
             float halfBaseGap = baseGap / 2f;
 
-            // 左棒・右棒の根元の隙間（localPosition）を固定
-            leftBar.localPosition = new Vector3(-halfBaseGap, leftBar.localPosition.y, leftBar.localPosition.z);
-            rightBar.localPosition = new Vector3(halfBaseGap, rightBar.localPosition.y, rightBar.localPosition.z);
+            // ハンドルのローカルX, Yは常に中央(0)などに固定し、Z軸方向（前後）の動きだけに制限する
+            operationHandle.localPosition = new Vector3(0, operationHandle.localPosition.y, operationHandle.localPosition.z);
 
             // Y軸を中心にローカル回転させてV字にする（奥が支点前提）
-            leftBar.localRotation = Quaternion.Euler(0, -currentAngle, 0);
-            rightBar.localRotation = Quaternion.Euler(0, currentAngle, 0);
+            float finalAngle = invertBarRotation ? -currentAngle : currentAngle;
+            leftBar.localRotation = Quaternion.Euler(0, -finalAngle, 0);
+            rightBar.localRotation = Quaternion.Euler(0, finalAngle, 0);
         }
 
         // ピボット（支点）の位置をエディタ上で可視化する
