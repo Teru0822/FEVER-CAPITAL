@@ -155,8 +155,6 @@ namespace MiniGames.FallBall
             {
                 isDragging = false;
             }
-        }
-
             // ドラッグ中の処理（InputSystemの値はUpdateで取得する）
             if (isDragging)
             {
