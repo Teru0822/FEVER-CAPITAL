@@ -185,8 +185,12 @@ namespace MiniGames.FallBall
                     
                     float targetZ = localHitPoint.z + dragOffsetZ;
                     
-                    // 単純にMinとMaxの間で制限する（ラチェット現象の解消）
-                    float clampedZ = Mathf.Clamp(targetZ, handleMinZ, handleMaxZ);
+                    // HandleMinZとHandleMaxZの数値の大小関係が逆（Zがマイナス方向など）の場合に備え、正しい最小値・最大値を判定する
+                    float actualMinZ = Mathf.Min(handleMinZ, handleMaxZ);
+                    float actualMaxZ = Mathf.Max(handleMinZ, handleMaxZ);
+                    
+                    // 単純にMinとMaxの間で制限する
+                    float clampedZ = Mathf.Clamp(targetZ, actualMinZ, actualMaxZ);
                     
                     Vector3 handlePos = operationHandle.localPosition;
                     handlePos.z = clampedZ;
