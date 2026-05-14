@@ -6,12 +6,7 @@ using UnityEngine.InputSystem;
 /// </summary>
 public class IntercomController : MonoBehaviour
 {
-    public enum IntercomState
-    {
-        Idle,       // 待機中
-        Calling,    // 着信中（ランプ緑点滅、映像表示、音再生）
-        Talking     // 通話中（ランプ緑点灯、映像表示、音停止）
-    }
+    public enum IntercomState { Idle, Calling, Talking }
 
     [Header("Settings")]
     [SerializeField] private IntercomState currentState = IntercomState.Idle;
@@ -20,49 +15,103 @@ public class IntercomController : MonoBehaviour
     [SerializeField] private string emissionKeyword = "_EmissionColor";
 
     [Header("References")]
-    [SerializeField] private GameObject displayObject;      // ディスプレイ（RawImageやRenderTextureが貼られた面）
-    [SerializeField] private Renderer lampRenderer;        // 右上ランプのRenderer
-    [SerializeField] private AudioSource callingSfx;       // 呼び出し音
-    [SerializeField] private GameObject entranceCamera;   // 玄関カメラ
+    [SerializeField] private Camera clickCamera;            // クリック判定に使用するカメラ
+    [SerializeField] private GameObject displayObject;      // 画面のオブジェクト
+    [SerializeField] private RenderTexture displayTexture;   // 玄関カメラのRenderTexture
+    [SerializeField] private Renderer lampRenderer;        // ランプのRenderer
+    [SerializeField] private AudioClip callingClip;        // チャイム音
+    [SerializeField] private GameObject entranceCamera;   // 玄関カメラ（オプション・負荷軽減用）
 
     private Material lampMaterial;
-    private Material displayMaterial;
+    private Material runtimeDisplayMaterial;
+    private AudioSource audioSource;
 
     private void Start()
     {
-        if (lampRenderer != null)
-        {
-            lampMaterial = lampRenderer.material;
-            lampMaterial.SetColor(emissionKeyword, Color.black);
-        }
+        // 再生用 AudioSource の準備
+        audioSource = gameObject.GetComponent<AudioSource>();
+        if (audioSource == null) audioSource = gameObject.AddComponent<AudioSource>();
+        audioSource.clip = callingClip;
+        audioSource.loop = true;
 
+        if (lampRenderer != null) lampMaterial = lampRenderer.material;
+
+        // 画面マテリアルの生成とテクスチャ割り当て（URP対応）
         if (displayObject != null)
         {
-            var renderer = displayObject.GetComponent<Renderer>();
-            if (renderer != null) displayMaterial = renderer.material;
+            var r = displayObject.GetComponent<Renderer>();
+            if (r != null)
+            {
+                Shader shader = Shader.Find("Universal Render Pipeline/Lit");
+                if (shader == null) shader = Shader.Find("Standard");
+                
+                runtimeDisplayMaterial = new Material(shader);
+                runtimeDisplayMaterial.name = "Intercom_Runtime_Material";
+                
+                if (displayTexture != null)
+                {
+                    runtimeDisplayMaterial.SetTexture("_BaseMap", displayTexture);
+                    runtimeDisplayMaterial.mainTexture = displayTexture;
+                    if (runtimeDisplayMaterial.HasProperty("_EmissionMap")) 
+                        runtimeDisplayMaterial.SetTexture("_EmissionMap", displayTexture);
+                }
+                
+                runtimeDisplayMaterial.color = Color.white;
+                r.material = runtimeDisplayMaterial;
+            }
         }
-
-        // 初期状態は待機
+        
         UpdateState(IntercomState.Idle);
     }
 
     private void Update()
     {
-        // U キー入力を監視
+        // U キーで着信開始
         if (Keyboard.current != null && Keyboard.current.uKey.wasPressedThisFrame)
         {
-            if (currentState == IntercomState.Idle)
-            {
-                UpdateState(IntercomState.Calling);
-            }
+            if (currentState == IntercomState.Idle) UpdateState(IntercomState.Calling);
         }
 
-        // 着信中のランプ点滅制御
+        // マウスクリックによるボタン操作
+        if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
+        {
+            HandleClick();
+        }
+
+        // 着信中のランプ点滅
         if (currentState == IntercomState.Calling)
         {
-            float lerp = (Mathf.Sin(Time.time * blinkSpeed * Mathf.PI) + 1.0f) / 2.0f;
-            Color currentEmission = Color.Lerp(Color.black, lampColor, lerp);
-            if (lampMaterial != null) lampMaterial.SetColor(emissionKeyword, currentEmission);
+            bool blink = (Mathf.FloorToInt(Time.time * blinkSpeed) % 2 == 0);
+            SetLampEmission(blink);
+        }
+    }
+
+    private void HandleClick()
+    {
+        Camera targetCam = clickCamera;
+        if (targetCam == null)
+        {
+            foreach (Camera cam in Camera.allCameras)
+            {
+                if (cam.enabled && cam.gameObject.activeInHierarchy) { targetCam = cam; break; }
+            }
+        }
+        if (targetCam == null) return;
+
+        Ray ray = targetCam.ScreenPointToRay(Mouse.current.position.ReadValue());
+        RaycastHit[] hits = Physics.RaycastAll(ray, 100f);
+        
+        foreach (var hit in hits)
+        {
+            IntercomButton btn = hit.collider.GetComponentInParent<IntercomButton>();
+            if (btn == null) btn = hit.collider.GetComponent<IntercomButton>();
+            if (btn == null) btn = hit.collider.GetComponentInChildren<IntercomButton>();
+
+            if (btn != null)
+            {
+                btn.OnClick();
+                return; 
+            }
         }
     }
 
@@ -73,36 +122,44 @@ public class IntercomController : MonoBehaviour
         switch (currentState)
         {
             case IntercomState.Idle:
-                SetDisplayActive(false);
+                if (displayObject != null) displayObject.SetActive(false);
+                if (entranceCamera != null) entranceCamera.SetActive(false);
                 SetLampEmission(false);
-                if (callingSfx != null) callingSfx.Stop();
+                if (audioSource != null) audioSource.Stop();
                 break;
 
             case IntercomState.Calling:
-                SetDisplayActive(true);
-                if (callingSfx != null && !callingSfx.isPlaying) callingSfx.Play();
+                if (displayObject != null) displayObject.SetActive(true);
+                if (entranceCamera != null) entranceCamera.SetActive(true);
+                SetDisplayVisual(true);
+                if (audioSource != null && !audioSource.isPlaying) audioSource.Play();
                 break;
 
             case IntercomState.Talking:
-                SetDisplayActive(true);
-                SetLampEmission(true); // 点灯
-                if (callingSfx != null) callingSfx.Stop();
+                if (displayObject != null) displayObject.SetActive(true);
+                if (entranceCamera != null) entranceCamera.SetActive(true);
+                SetDisplayVisual(true);
+                SetLampEmission(true);
+                if (audioSource != null) audioSource.Stop();
                 break;
         }
     }
 
-    private void SetDisplayActive(bool active)
+    private void SetDisplayVisual(bool active)
     {
-        if (displayObject != null) displayObject.SetActive(active);
-        if (entranceCamera != null) entranceCamera.SetActive(active);
-        
-        // 画面の発光制御
-        if (displayMaterial != null)
+        if (runtimeDisplayMaterial != null)
         {
-            // 画面がONの時は白っぽく発光させる（RenderTextureがよく見えるように）
-            displayMaterial.SetColor(emissionKeyword, active ? Color.white : Color.black);
-            if (active) displayMaterial.EnableKeyword("_EMISSION");
-            else displayMaterial.DisableKeyword("_EMISSION");
+            // 映像を表示させるための発光設定
+            if (active)
+            {
+                runtimeDisplayMaterial.SetColor("_EmissionColor", new Color(0.4f, 0.4f, 0.4f));
+                runtimeDisplayMaterial.EnableKeyword("_EMISSION");
+            }
+            else
+            {
+                runtimeDisplayMaterial.SetColor("_EmissionColor", Color.black);
+                runtimeDisplayMaterial.DisableKeyword("_EMISSION");
+            }
         }
     }
 
@@ -110,35 +167,20 @@ public class IntercomController : MonoBehaviour
     {
         if (lampMaterial != null)
         {
-            lampMaterial.SetColor(emissionKeyword, active ? lampColor : Color.black);
-            if (active) lampMaterial.EnableKeyword("_EMISSION");
-            else lampMaterial.DisableKeyword("_EMISSION");
+            if (active)
+            {
+                lampMaterial.SetColor(emissionKeyword, lampColor);
+                lampMaterial.EnableKeyword("_EMISSION");
+            }
+            else
+            {
+                lampMaterial.SetColor(emissionKeyword, Color.black);
+                lampMaterial.DisableKeyword("_EMISSION");
+            }
         }
     }
 
-    // --- ボタンから呼ばれる公開メソッド ---
-
-    public void OnClickCentralButton()
-    {
-        if (currentState == IntercomState.Calling)
-        {
-            UpdateState(IntercomState.Talking);
-            Debug.Log("Intercom: 通話開始");
-        }
-    }
-
-    public void OnClickRightButton()
-    {
-        if (currentState != IntercomState.Idle)
-        {
-            UpdateState(IntercomState.Idle);
-            Debug.Log("Intercom: 通話終了");
-        }
-    }
-
-    public void OnClickLeftButton()
-    {
-        Debug.Log("Intercom: 受け渡し口の開錠（未実装・将来対応）");
-    }
+    public void OnClickCentralButton() { if (currentState == IntercomState.Calling) UpdateState(IntercomState.Talking); }
+    public void OnClickRightButton() { if (currentState != IntercomState.Idle) UpdateState(IntercomState.Idle); }
+    public void OnClickLeftButton() { /* 開錠ロジック用（将来） */ }
 }
-
