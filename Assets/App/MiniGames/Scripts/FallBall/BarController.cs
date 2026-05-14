@@ -113,13 +113,15 @@ namespace MiniGames.FallBall
 
                 foreach (var hit in hits)
                 {
-                    allHits += $"[{hit.transform.name}] ";
+                    // hit.transformではなく、確実にColliderが付いているオブジェクトの名前を取得
+                    allHits += $"[{hit.collider.gameObject.name}] ";
 
-                    if (operationHandle != null && (hit.transform == operationHandle || hit.transform.IsChildOf(operationHandle)))
+                    // hit.collider.transform と比較する（親にRigidbodyがある場合のUnityの仕様対策）
+                    if (operationHandle != null && (hit.collider.transform == operationHandle || hit.collider.transform.IsChildOf(operationHandle)))
                     {
                         hitHandle = true;
                         Debug.Log("✅ BarController: ハンドルのクリックを検知しました！");
-                        break; // ハンドルが見つかったら終了
+                        break; 
                     }
                 }
 
