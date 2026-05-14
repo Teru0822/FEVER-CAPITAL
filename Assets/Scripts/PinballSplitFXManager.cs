@@ -27,12 +27,21 @@ public class PinballSplitFXManager : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void EnsureInstanceOnSceneLoad()
     {
-        _ = Instance;
+        if (FindFirstObjectByType<PinballBallConfig>() != null || FindFirstObjectByType<PinballBallController>() != null)
+        {
+            _ = Instance;
+        }
         SceneManager.sceneLoaded -= HandleSceneLoaded;
         SceneManager.sceneLoaded += HandleSceneLoaded;
     }
 
-    private static void HandleSceneLoaded(Scene scene, LoadSceneMode mode) { _ = Instance; }
+    private static void HandleSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        if (FindFirstObjectByType<PinballBallConfig>() != null || FindFirstObjectByType<PinballBallController>() != null)
+        {
+            _ = Instance;
+        }
+    }
 
     private PinballBallConfig _config;
     private AudioSource[] _sourcePool;

@@ -30,6 +30,7 @@ namespace MiniGames.FallBall
         private int currentBet;
         private bool isFinished = false;
 
+        private GameObject ballTemplate;
         private Vector3 initialBallPosition;
         private Quaternion initialBallRotation;
 
@@ -37,8 +38,15 @@ namespace MiniGames.FallBall
         {
             if (ballObject != null)
             {
-                initialBallPosition = ballObject.transform.position;
-                initialBallRotation = ballObject.transform.rotation;
+                // 元のオブジェクトを非表示にしてテンプレート化（削除されて参照が消えるのを防ぐ）
+                ballTemplate = ballObject;
+                ballTemplate.SetActive(false);
+                
+                initialBallPosition = ballTemplate.transform.position;
+                initialBallRotation = ballTemplate.transform.rotation;
+                
+                // 最初に1つだけ表示用として出す
+                SpawnNewBall();
             }
         }
 
@@ -52,9 +60,11 @@ namespace MiniGames.FallBall
 
         private void SpawnNewBall()
         {
-            if (ballObject == null) return;
+            if (ballTemplate == null) return;
 
-            GameObject newBall = Instantiate(ballObject, initialBallPosition, initialBallRotation);
+            GameObject newBall = Instantiate(ballTemplate, initialBallPosition, initialBallRotation);
+            newBall.SetActive(true); // 複製したものを表示する
+            
             Rigidbody rb = newBall.GetComponent<Rigidbody>();
             if (rb != null)
             {

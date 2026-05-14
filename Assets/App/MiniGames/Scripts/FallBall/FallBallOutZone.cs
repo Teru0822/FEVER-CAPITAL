@@ -24,6 +24,9 @@ namespace MiniGames.FallBall
                     // GameManagerの失敗処理を呼び出す
                     gameManager.OnOutZoneReached();
                 }
+
+                // ボールを消去する
+                Destroy(other.gameObject);
             }
         }
     }

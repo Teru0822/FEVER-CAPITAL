@@ -53,14 +53,20 @@ public class PinballBallManager : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void EnsureInstanceOnSceneLoad()
     {
-        _ = Instance;
+        if (FindFirstObjectByType<PinballBallConfig>() != null || FindFirstObjectByType<PinballBallController>() != null)
+        {
+            _ = Instance;
+        }
         SceneManager.sceneLoaded -= HandleSceneLoaded;
         SceneManager.sceneLoaded += HandleSceneLoaded;
     }
 
     private static void HandleSceneLoaded(Scene scene, LoadSceneMode mode)
     {
-        _ = Instance;
+        if (FindFirstObjectByType<PinballBallConfig>() != null || FindFirstObjectByType<PinballBallController>() != null)
+        {
+            _ = Instance;
+        }
     }
 
     // ボール配列
