@@ -10,6 +10,8 @@ public class MoneyManager : MonoBehaviour
 
     [Header("初期設定")]
     [SerializeField] private float _currentMoney = 10000;
+    public float CurrentMoney => _currentMoney;
+
 
     [Header("ターン管理")]
     [SerializeField] private int _decreaseInterval = 1;
