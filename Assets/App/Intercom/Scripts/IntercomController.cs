@@ -122,7 +122,9 @@ public class IntercomController : MonoBehaviour
         switch (currentState)
         {
             case IntercomState.Idle:
-                if (displayObject != null) displayObject.SetActive(false);
+                // 画面を消さずに黒くする
+                if (displayObject != null) displayObject.SetActive(true);
+                SetDisplayVisual(false);
                 if (entranceCamera != null) entranceCamera.SetActive(false);
                 SetLampEmission(false);
                 if (audioSource != null) audioSource.Stop();
@@ -149,10 +151,19 @@ public class IntercomController : MonoBehaviour
     {
         if (runtimeDisplayMaterial != null)
         {
+            // 基本色を白/黒に切り替えることで電源ON/OFFを表現
+            Color targetColor = active ? Color.white : Color.black;
+            runtimeDisplayMaterial.color = targetColor;
+            
+            // URP のプロパティ名にも一応セット
+            if (runtimeDisplayMaterial.HasProperty("_BaseColor"))
+                runtimeDisplayMaterial.SetColor("_BaseColor", targetColor);
+
             // 映像を表示させるための発光設定
             if (active)
             {
-                runtimeDisplayMaterial.SetColor("_EmissionColor", new Color(0.4f, 0.4f, 0.4f));
+                // 白飛びしない程度の控えめな発光
+                runtimeDisplayMaterial.SetColor("_EmissionColor", new Color(0.2f, 0.2f, 0.2f));
                 runtimeDisplayMaterial.EnableKeyword("_EMISSION");
             }
             else
@@ -162,6 +173,7 @@ public class IntercomController : MonoBehaviour
             }
         }
     }
+
 
     private void SetLampEmission(bool active)
     {
