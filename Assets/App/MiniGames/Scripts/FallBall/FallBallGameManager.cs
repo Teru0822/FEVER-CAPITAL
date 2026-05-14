@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace MiniGames.FallBall
 {
@@ -18,12 +19,50 @@ namespace MiniGames.FallBall
         [Header("References")]
         [Tooltip("棒の操作コントローラー")]
         [SerializeField] private BarController barController;
-        [Tooltip("落下させる鉄球のGameObject")]
+        [Tooltip("落下させる鉄球のGameObject（プレハブまたはシーン内の元オブジェクト）")]
         [SerializeField] private GameObject ballObject;
+
+        [Header("Debug & Test")]
+        [Tooltip("テスト用に、ボールが落ちてもゲームを終了せず操作を続けられるようにする")]
+        [SerializeField] private bool allowContinuousPlay = true;
         
         private Rigidbody ballRigidbody;
         private int currentBet;
         private bool isFinished = false;
+
+        private Vector3 initialBallPosition;
+        private Quaternion initialBallRotation;
+
+        private void Start()
+        {
+            if (ballObject != null)
+            {
+                initialBallPosition = ballObject.transform.position;
+                initialBallRotation = ballObject.transform.rotation;
+            }
+        }
+
+        private void Update()
+        {
+            if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
+            {
+                SpawnNewBall();
+            }
+        }
+
+        private void SpawnNewBall()
+        {
+            if (ballObject == null) return;
+
+            GameObject newBall = Instantiate(ballObject, initialBallPosition, initialBallRotation);
+            Rigidbody rb = newBall.GetComponent<Rigidbody>();
+            if (rb != null)
+            {
+                rb.isKinematic = false;
+                rb.linearVelocity = Vector3.zero;
+            }
+            Debug.Log("FallBall: Spaceキーで新しいボールを出しました！");
+        }
 
         public void Initialize(int betAmount)
         {
@@ -61,10 +100,13 @@ namespace MiniGames.FallBall
         /// </summary>
         public void OnGoalReached()
         {
-            if (isFinished) return;
+            if (isFinished && !allowContinuousPlay) return;
             isFinished = true;
             
-            if (barController != null) barController.SetActive(false);
+            if (!allowContinuousPlay && barController != null) 
+            {
+                barController.SetActive(false);
+            }
             
             Debug.Log($"FallBall: Goal Reached! Success. Won: {currentBet * successMultiplier}");
             OnGameCompleted?.Invoke(true, successMultiplier);
@@ -76,10 +118,13 @@ namespace MiniGames.FallBall
         /// </summary>
         public void OnOutZoneReached()
         {
-            if (isFinished) return;
+            if (isFinished && !allowContinuousPlay) return;
             isFinished = true;
             
-            if (barController != null) barController.SetActive(false);
+            if (!allowContinuousPlay && barController != null)
+            {
+                barController.SetActive(false);
+            }
             
             Debug.Log("FallBall: Dropped outside! Failed.");
             OnGameCompleted?.Invoke(false, 0f);
