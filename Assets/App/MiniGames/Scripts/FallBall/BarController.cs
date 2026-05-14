@@ -157,47 +157,50 @@ namespace MiniGames.FallBall
             }
         }
 
-        private void FixedUpdate()
-        {
-            // 物理演算（移動・回転）はFixedUpdateで行う
-            if (isDragging && Mouse.current != null && Camera.main != null && operationHandle != null)
+            // ドラッグ中の処理（InputSystemの値はUpdateで取得する）
+            if (isDragging)
             {
                 // --- 左右操作（ベース全体の回転：エイム） ---
                 Vector2 mouseDelta = Mouse.current.delta.ReadValue();
                 currentYaw += mouseDelta.x * yawSensitivity;
                 currentYaw = Mathf.Clamp(currentYaw, minYaw, maxYaw);
 
-                Quaternion newRot = initialRotation * Quaternion.Euler(0, currentYaw, 0);
-
-                if (parentRigidbody != null)
+                // もしRigidbodyがない場合は即座に回転（ある場合はFixedUpdateでMoveRotation）
+                if (parentRigidbody == null)
                 {
-                    parentRigidbody.MoveRotation(newRot);
-                }
-                else
-                {
-                    transform.localRotation = newRot;
+                    transform.localRotation = initialRotation * Quaternion.Euler(0, currentYaw, 0);
                 }
 
                 // --- 縦移動（ハンドルのZ軸移動）の計算 ---
-                // 回転後の状態でPlaneを再計算してズレを防ぐ
                 Ray ray = Camera.main.ScreenPointToRay(Mouse.current.position.ReadValue());
                 Plane dragPlane = new Plane(transform.up, transform.position);
 
                 if (dragPlane.Raycast(ray, out float enter))
                 {
                     Vector3 worldHitPoint = ray.GetPoint(enter);
-                    
-                    // マウス座標をベースのローカル座標系に変換
                     Vector3 localHitPoint = transform.InverseTransformPoint(worldHitPoint);
                     
-                    // ハンドルのZ移動先を計算して制限する
                     float targetZ = localHitPoint.z + dragOffsetZ;
-                    float clampedZ = Mathf.Clamp(targetZ, handleMinZ, handleMaxZ);
+                    
+                    // Inspectorの HandleMaxZ が小さすぎる場合にワープするのを防ぐ
+                    float effectiveMaxZ = Mathf.Max(handleMaxZ, operationHandle.localPosition.z);
+                    float effectiveMinZ = Mathf.Min(handleMinZ, operationHandle.localPosition.z);
+                    float clampedZ = Mathf.Clamp(targetZ, effectiveMinZ, effectiveMaxZ);
                     
                     Vector3 handlePos = operationHandle.localPosition;
                     handlePos.z = clampedZ;
                     operationHandle.localPosition = handlePos;
                 }
+            }
+        }
+
+        private void FixedUpdate()
+        {
+            // 物理演算（回転の適用）のみをFixedUpdateで行う
+            if (Application.isPlaying && parentRigidbody != null && parentRigidbody.isKinematic)
+            {
+                Quaternion newRot = initialRotation * Quaternion.Euler(0, currentYaw, 0);
+                parentRigidbody.MoveRotation(newRot);
             }
         }
 
