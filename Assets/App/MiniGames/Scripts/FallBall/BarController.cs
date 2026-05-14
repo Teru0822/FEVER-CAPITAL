@@ -60,6 +60,11 @@ namespace MiniGames.FallBall
         {
             if (Application.isPlaying)
             {
+                if (operationHandle == null)
+                {
+                    Debug.LogError("🚨【重要エラー】Inspectorの『Operation Handle』にハンドルがドラッグ＆ドロップされていません！");
+                }
+
                 if (parentRigidbody == null) parentRigidbody = GetComponent<Rigidbody>();
                 
                 if (parentRigidbody != null && !parentRigidbody.isKinematic)
@@ -102,20 +107,25 @@ namespace MiniGames.FallBall
                 // RaycastAllを使用して、他の透明なコライダーに遮られても貫通して判定する
                 RaycastHit[] hits = Physics.RaycastAll(ray);
                 bool hitHandle = false;
+                
+                // 【デバッグ用】当たったすべてのオブジェクトの名前を記録
+                string allHits = "";
 
                 foreach (var hit in hits)
                 {
+                    allHits += $"[{hit.transform.name}] ";
+
                     if (operationHandle != null && (hit.transform == operationHandle || hit.transform.IsChildOf(operationHandle)))
                     {
                         hitHandle = true;
-                        Debug.Log("BarController: ハンドルのクリックを検知しました！");
+                        Debug.Log("✅ BarController: ハンドルのクリックを検知しました！");
                         break; // ハンドルが見つかったら終了
                     }
                 }
 
                 if (!hitHandle && hits.Length > 0)
                 {
-                    Debug.Log($"BarController: クリックしましたがハンドルには当たりませんでした。（当たったもの: {hits[0].transform.name}）\n※ハンドルにColliderが付いているか確認してください。");
+                    Debug.Log($"❌ BarController: クリックした線上にハンドルがありません。\n通過したオブジェクト: {allHits}");
                 }
                 else if (!hitHandle)
                 {
