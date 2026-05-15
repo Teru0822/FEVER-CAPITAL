@@ -85,6 +85,10 @@ public class PinballBallController : MonoBehaviour
     [Tooltip("このボールに毎 FixedUpdate で掛ける重力ベクトル (m/s²)。Awake 時に Config.EffectiveGravity で初期化されるが、Conveyor 等で個別に上書き可能。")]
     public Vector3 gravity = new Vector3(0f, -9.81f, 9.81f);
 
+    /// <summary>現在いくつのコンベアに乗っているか (>0 の間は重力適用をスキップしてスイーッと運ばれる)</summary>
+    [HideInInspector] public int onConveyorCount = 0;
+    public bool IsOnConveyor => onConveyorCount > 0;
+
     private bool _isSplitting = false;
 
     private Rigidbody rb;
@@ -159,6 +163,9 @@ public class PinballBallController : MonoBehaviour
     void FixedUpdate()
     {
         _isSplitting = false;
+        // コンベアに乗っている間は重力をスキップ (コンベア側が velocity を支配)
+        if (IsOnConveyor) return;
+
         if (_useManualGravity)
         {
             // この玉固有の gravity を scale 倍して手動適用 (Unity 重力は OFF)

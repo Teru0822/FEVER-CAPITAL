@@ -2,19 +2,15 @@ using UnityEngine;
 
 /// <summary>
 /// ピンボール盤面用ベルトコンベア。
-/// このオブジェクトの Collider に接触/侵入した Rigidbody を、指定方向 (既定: ローカル +Y) へ
-/// 一定速度で押し出す。pinballRoot のスケール倍率に追従する。
+/// 「スイーッ」と滑らかに玉を運ぶため、接触中のボールについては
+///   - PinballBallController.IsOnConveyor を立てて重力適用をスキップさせる
+///   - 速度を毎フレーム ベルト方向 × beltSpeed に上書き
+/// する。重力もバウンスも介入しないので等速で吸い付くように移動する。
 ///
-/// バウンス対策:
-///   - 同 Collider に bounciness=0 の PhysicsMaterial を Awake で自動付与する
-///   - ベルト方向の速度成分は常に beltSpeed に「上書き」する (弾かれた瞬間の余剰も即座に修正)
-///   - 垂直方向に持ち上げたい場合は Collider を Trigger にすると確実 (バウンスが完全消去される)
-///
-/// 使い方:
-///   1. 空 GameObject に BoxCollider 等を付け、ベルト面の形状にスケール
-///   2. 本コンポーネントをアタッチ
-///   3. direction (ローカル軸) を押し出したい向きに、speed を m/s で設定
-///   4. **垂直に持ち上げたいなら Collider の Is Trigger を ON 推奨**
+/// 推奨セットアップ:
+///   - Collider を Box などにしてベルト面の体積をカバーする
+///   - **Is Trigger を ON** にすると最も滑らか (バウンス完全消去)
+///   - direction = (0, 1, 0) で上方向にリフト
 /// </summary>
 [RequireComponent(typeof(Collider))]
 public class PinballConveyor : MonoBehaviour
@@ -29,27 +25,20 @@ public class PinballConveyor : MonoBehaviour
     [Tooltip("ベルト速度 (m/s)。pinballRoot のスケール倍率に追従する")]
     [SerializeField, Min(0f)] private float speed = 2f;
 
-    [Header("挙動オプション")]
-    [Tooltip("接触中のボールに掛かる重力を打ち消す追加上向き加速度 (m/s²)。垂直リフトで沈み込みを防ぐ。0 で無効。")]
-    [SerializeField, Min(0f)] private float gravityCancelBoost = 0f;
-
-    [Range(0f, 1f)]
-    [Tooltip("垂直方向 (ベルト方向以外) の速度を毎フレーム何割減らすか (バウンス収束用)。0=無、1=完全停止")]
-    [SerializeField] private float perpDamping = 0.3f;
-
-    [Tooltip("Awake 時にこの Collider へ bounciness=0 の PhysicsMaterial を自動付与する")]
-    [SerializeField] private bool autoApplyNoBounceMaterial = true;
-
-    [Header("重力切替")]
-    [Tooltip("ベルトに触れたボールの PinballBallController.gravity をこの値に上書きする")]
+    [Header("重力切替 (ベルト退出後)")]
+    [Tooltip("ベルトに触れたボールの PinballBallController.gravity をこの値に上書きする (退出後にも残る)")]
     [SerializeField] private bool changeGravityOnTouch = true;
 
     [Tooltip("接触時に設定する重力ベクトル (m/s²)。既定 (0, -9.81, 0) で純粋な垂直落下に切り替わる。")]
     [SerializeField] private Vector3 onTouchGravity = new Vector3(0f, -9.81f, 0f);
 
     [Header("適用対象")]
-    [Tooltip("対象タグ (空なら Rigidbody を持つ全衝突物に適用)")]
+    [Tooltip("対象タグ (空なら PinballBallController を持つ全衝突物に適用)")]
     [SerializeField] private string targetTag = "";
+
+    [Header("オプション")]
+    [Tooltip("Awake 時に Collider へ bounciness=0 の PhysicsMaterial を自動付与 (非 Trigger 時の保険)")]
+    [SerializeField] private bool autoApplyNoBounceMaterial = true;
 
     private PinballBallConfig _config;
 
@@ -60,35 +49,48 @@ public class PinballConveyor : MonoBehaviour
         if (autoApplyNoBounceMaterial)
         {
             var col = GetComponent<Collider>();
-            if (col != null && col.sharedMaterial == null)
+            if (col != null && !col.isTrigger && col.sharedMaterial == null)
             {
-                var mat = new PhysicsMaterial("ConveyorNoBounce")
+                col.sharedMaterial = new PhysicsMaterial("ConveyorNoBounce")
                 {
                     bounciness = 0f,
-                    dynamicFriction = 0.3f,
-                    staticFriction = 0.3f,
-                    bounceCombine = PhysicsMaterialCombine.Multiply, // 双方の bounce を掛け合わせ → 0
-                    frictionCombine = PhysicsMaterialCombine.Average,
+                    dynamicFriction = 0f,
+                    staticFriction = 0f,
+                    bounceCombine = PhysicsMaterialCombine.Multiply,
+                    frictionCombine = PhysicsMaterialCombine.Minimum,
                 };
-                col.sharedMaterial = mat;
             }
         }
     }
 
-    void OnCollisionStay(Collision collision)
+    // ---------- Trigger / Collision 共通ハンドリング ----------
+    void OnTriggerEnter(Collider other) { OnEnterBelt(other.attachedRigidbody, other.gameObject); }
+    void OnTriggerExit(Collider other) { OnExitBelt(other.attachedRigidbody, other.gameObject); }
+    void OnTriggerStay(Collider other) { OnStayBelt(other.attachedRigidbody, other.gameObject); }
+
+    void OnCollisionEnter(Collision c) { OnEnterBelt(c.rigidbody, c.gameObject); }
+    void OnCollisionExit(Collision c) { OnExitBelt(c.rigidbody, c.gameObject); }
+    void OnCollisionStay(Collision c) { OnStayBelt(c.rigidbody, c.gameObject); }
+
+    void OnEnterBelt(Rigidbody rb, GameObject go)
     {
-        Apply(collision.rigidbody, collision.gameObject);
+        var ctrl = ResolveTargetController(rb, go);
+        if (ctrl == null) return;
+        ctrl.onConveyorCount++;
+        if (changeGravityOnTouch) ctrl.gravity = onTouchGravity;
     }
 
-    void OnTriggerStay(Collider other)
+    void OnExitBelt(Rigidbody rb, GameObject go)
     {
-        Apply(other.attachedRigidbody, other.gameObject);
+        var ctrl = ResolveTargetController(rb, go);
+        if (ctrl == null) return;
+        if (ctrl.onConveyorCount > 0) ctrl.onConveyorCount--;
     }
 
-    void Apply(Rigidbody rb, GameObject go)
+    void OnStayBelt(Rigidbody rb, GameObject go)
     {
-        if (rb == null || rb.isKinematic) return;
-        if (!string.IsNullOrEmpty(targetTag) && go != null && !go.CompareTag(targetTag)) return;
+        var ctrl = ResolveTargetController(rb, go);
+        if (ctrl == null || rb == null || rb.isKinematic) return;
 
         Vector3 worldDir = useLocalDirection
             ? transform.TransformDirection(direction.sqrMagnitude > 0.0001f ? direction.normalized : Vector3.up)
@@ -97,27 +99,15 @@ public class PinballConveyor : MonoBehaviour
         float scale = _config != null ? _config.CurrentScaleFactor : 1f;
         float beltSpeed = speed * scale;
 
-        Vector3 v = rb.linearVelocity;
-        float curAlong = Vector3.Dot(v, worldDir);
-        Vector3 vPerp = v - worldDir * curAlong;
+        // 重力スキップ中なので、速度を完全置換しても他要素と衝突しない
+        rb.linearVelocity = worldDir * beltSpeed;
+    }
 
-        // ベルト方向成分を「常に」beltSpeed に上書き (弾かれた瞬間の正方向余剰も含めて修正)
-        // → 不足分加算ではなく上限/下限ともに beltSpeed にクランプする挙動
-        vPerp *= (1f - perpDamping); // 横方向の振動を減衰
-        rb.linearVelocity = vPerp + worldDir * beltSpeed;
-
-        // 重力打ち消し用の追加加速度 (重い玉が沈みやすい時)
-        if (gravityCancelBoost > 0f)
-        {
-            rb.AddForce(worldDir * gravityCancelBoost, ForceMode.Acceleration);
-        }
-
-        // ボール固有の gravity を上書き (Conveyor 通過後はこの値で動く)
-        if (changeGravityOnTouch)
-        {
-            var ctrl = rb.GetComponent<PinballBallController>();
-            if (ctrl != null) ctrl.gravity = onTouchGravity;
-        }
+    PinballBallController ResolveTargetController(Rigidbody rb, GameObject go)
+    {
+        if (rb == null) return null;
+        if (!string.IsNullOrEmpty(targetTag) && go != null && !go.CompareTag(targetTag)) return null;
+        return rb.GetComponent<PinballBallController>();
     }
 
     void OnDrawGizmosSelected()
