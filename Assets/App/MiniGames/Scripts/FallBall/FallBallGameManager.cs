@@ -21,6 +21,8 @@ namespace MiniGames.FallBall
         [SerializeField] private BarController barController;
         [Tooltip("落下させる鉄球のGameObject（プレハブまたはシーン内の元オブジェクト）")]
         [SerializeField] private GameObject ballObject;
+        [Tooltip("ボール補充アニメーションのコントローラー")]
+        [SerializeField] private FallBallRefillController refillController;
 
         [Header("Debug & Test")]
         [Tooltip("テスト用に、ボールが落ちてもゲームを終了せず操作を続けられるようにする")]
@@ -54,6 +56,9 @@ namespace MiniGames.FallBall
         {
             if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
             {
+                // 補充アニメーション中は追加スポーンを無効化
+                if (refillController != null && refillController.IsRefilling) return;
+                
                 SpawnNewBall();
             }
         }
@@ -62,8 +67,17 @@ namespace MiniGames.FallBall
         {
             if (ballTemplate == null) return;
 
+            // RefillController が設定されている場合はアニメーション付きで補充
+            if (refillController != null)
+            {
+                StartCoroutine(refillController.PlayRefillSequence());
+                Debug.Log("FallBall: 補充アニメーションを開始しました");
+                return;
+            }
+            
+            // RefillController が未設定の場合は従来のシンプルなスポーン
             GameObject newBall = Instantiate(ballTemplate, initialBallPosition, initialBallRotation);
-            newBall.SetActive(true); // 複製したものを表示する
+            newBall.SetActive(true);
             
             Rigidbody rb = newBall.GetComponent<Rigidbody>();
             if (rb != null)
