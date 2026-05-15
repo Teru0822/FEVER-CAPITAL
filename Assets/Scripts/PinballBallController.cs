@@ -88,6 +88,29 @@ public class PinballBallController : MonoBehaviour
     [Tooltip("このボールの世代 (0 = 初期、Manager がスポーン時に上書きする)")]
     public int generation = 0;
 
+    [Header("Enforce 発色")]
+    [Tooltip("Enforce Pin に当たるたびに 1 つ進む。index 0 = 初期 (無発光) ... 後ろほど強い色\n推奨: [黒, 緑, 青, 紫, 金, 赤]")]
+    [SerializeField] private Color[] enforceColors = new Color[]
+    {
+        Color.black,                               // 0: 無発光
+        new Color(0f, 1f, 0f),                     // 1: 緑
+        new Color(0f, 0.5f, 1f),                   // 2: 青
+        new Color(0.7f, 0f, 1f),                   // 3: 紫
+        new Color(1f, 0.84f, 0f),                  // 4: 金
+        new Color(1f, 0f, 0f),                     // 5: 赤
+    };
+
+    [Tooltip("玉の発光強度倍率")]
+    [SerializeField, Min(0f)] private float ballEmissionIntensity = 2f;
+
+    [Tooltip("発光させる Renderer。未設定なら子から自動検索")]
+    [SerializeField] private Renderer ballRenderer;
+
+    /// <summary>Enforce Pin で上昇する発色レベル (Manager がスポーン時に親から継承する)</summary>
+    [HideInInspector] public int enforceLevel = 0;
+
+    private Material _ballMaterialInstance;
+
     [Header("重力 (このボール固有)")]
     [Tooltip("このボールに毎 FixedUpdate で掛ける重力ベクトル (m/s²)。Awake 時に Config.EffectiveGravity で初期化されるが、Conveyor 等で個別に上書き可能。")]
     public Vector3 gravity = new Vector3(0f, -9.81f, 9.81f);
@@ -190,11 +213,66 @@ public class PinballBallController : MonoBehaviour
     void OnCollisionEnter(Collision collision)
     {
         if (_isSplitting) return;
-        if (!collision.gameObject.CompareTag(splitTargetTag)) return;
 
+        // PinballPin (Enforce / Split) を最優先でハンドル
+        var pin = collision.collider.GetComponent<PinballPin>();
+        if (pin == null) pin = collision.collider.GetComponentInParent<PinballPin>();
+        if (pin != null)
+        {
+            if (pin.IsConsumed) return; // 既に黒く消費済み → 効果なし
+            switch (pin.Type)
+            {
+                case PinballPin.PinType.Enforce:
+                    pin.TryConsume();
+                    EnforceLevelUp();
+                    return;
+                case PinballPin.PinType.Split:
+                    pin.TryConsume();
+                    BeginSplit(collision);
+                    return;
+            }
+        }
+
+        // 互換: 旧 Splitter タグ (PinballPin が無いピン) は従来通り消費なしで分裂
+        if (collision.gameObject.CompareTag(splitTargetTag))
+        {
+            BeginSplit(collision);
+        }
+    }
+
+    void BeginSplit(Collision collision)
+    {
         _isSplitting = true;
         Vector3 posAtCollision = transform.position;
         StartCoroutine(SplitNextFrame(posAtCollision, collision.collider));
+    }
+
+    /// <summary>Enforce Pin に触れた時に呼ぶ。発色レベル+1 (上限まで) して emission を更新。</summary>
+    public void EnforceLevelUp()
+    {
+        if (enforceColors == null || enforceColors.Length == 0) return;
+        int max = enforceColors.Length - 1;
+        if (enforceLevel < max)
+        {
+            enforceLevel++;
+            ApplyBallEmission();
+        }
+    }
+
+    /// <summary>現在の enforceLevel に応じて玉の Renderer の emission を更新する。Manager からスポーン時にも呼ばれる。</summary>
+    public void ApplyBallEmission()
+    {
+        if (_ballMaterialInstance == null)
+        {
+            if (ballRenderer == null) ballRenderer = GetComponentInChildren<Renderer>();
+            if (ballRenderer == null) return;
+            _ballMaterialInstance = ballRenderer.material;
+        }
+        if (enforceColors == null || enforceColors.Length == 0) return;
+        int idx = Mathf.Clamp(enforceLevel, 0, enforceColors.Length - 1);
+        Color c = enforceColors[idx] * ballEmissionIntensity;
+        _ballMaterialInstance.EnableKeyword("_EMISSION");
+        _ballMaterialInstance.SetColor("_EmissionColor", c);
     }
 
     IEnumerator SplitNextFrame(Vector3 posAtCollision, Collider splitTargetCollider)
