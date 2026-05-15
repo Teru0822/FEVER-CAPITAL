@@ -50,6 +50,9 @@ namespace MiniGames.FallBall
         [Tooltip("コライダーを有効化に戻す終了フレーム")]
         [SerializeField] private int disableEndFrame = 60;
 
+        [Tooltip("アームが開いてからボールを離すまでの待機時間（秒）")]
+        [SerializeField] private float dropDelay = 0.2f;
+
         /// <summary>
         /// 補充シーケンスが実行中かどうか。
         /// </summary>
