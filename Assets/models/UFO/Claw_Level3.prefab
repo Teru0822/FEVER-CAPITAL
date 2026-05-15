@@ -1,0 +1,297 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &1341091503218799179
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 5054131735013707164}
+  m_Layer: 0
+  m_Name: ClawCollider2
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &5054131735013707164
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1341091503218799179}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 3710286077979709787}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &2303751842921964402
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 3518504451920833957}
+  m_Layer: 0
+  m_Name: ClawCollider1
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &3518504451920833957
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2303751842921964402}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0.00000023841847, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0.000026268232, y: 0.0016107536, z: 0.027012793}
+  m_LocalScale: {x: 0.06479195, y: 0.05175363, z: 0.3059192}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2806261536616133164}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &7380291773882660744
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 13288687950955096}
+  m_Layer: 0
+  m_Name: ClawCollider2
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &13288687950955096
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7380291773882660744}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0.00000023841847, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0.000026268232, y: 0.0016107536, z: 0.027012793}
+  m_LocalScale: {x: 0.06479195, y: 0.05175363, z: 0.3059192}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2806261536616133164}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &8972548849892802538
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 8537289686583791342}
+  m_Layer: 0
+  m_Name: ClawCollider1
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &8537289686583791342
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8972548849892802538}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 3710286077979709787}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1001 &4769809773984240718
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: -8679921383154817045, guid: 47db71f88a17f99468109bb15f76bab8, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 6.0710006
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 47db71f88a17f99468109bb15f76bab8, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: -0.6290002
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 47db71f88a17f99468109bb15f76bab8, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -4.7450013
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 47db71f88a17f99468109bb15f76bab8, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.7071068
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 47db71f88a17f99468109bb15f76bab8, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 47db71f88a17f99468109bb15f76bab8, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0.7071068
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 47db71f88a17f99468109bb15f76bab8, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 47db71f88a17f99468109bb15f76bab8, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 47db71f88a17f99468109bb15f76bab8, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 47db71f88a17f99468109bb15f76bab8, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -6923453667333933797, guid: 47db71f88a17f99468109bb15f76bab8, type: 3}
+      propertyPath: m_Name
+      value: finher4
+      objectReference: {fileID: 0}
+    - target: {fileID: -1397303492462338110, guid: 47db71f88a17f99468109bb15f76bab8, type: 3}
+      propertyPath: m_Name
+      value: finger1
+      objectReference: {fileID: 0}
+    - target: {fileID: 919132149155446097, guid: 47db71f88a17f99468109bb15f76bab8, type: 3}
+      propertyPath: m_Name
+      value: Claw_Level3
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects:
+    - targetCorrespondingSourceObject: {fileID: 8163989492819723541, guid: 47db71f88a17f99468109bb15f76bab8, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 8537289686583791342}
+    - targetCorrespondingSourceObject: {fileID: 8163989492819723541, guid: 47db71f88a17f99468109bb15f76bab8, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 5054131735013707164}
+    - targetCorrespondingSourceObject: {fileID: 7259823799755662946, guid: 47db71f88a17f99468109bb15f76bab8, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 3518504451920833957}
+    - targetCorrespondingSourceObject: {fileID: 7259823799755662946, guid: 47db71f88a17f99468109bb15f76bab8, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 13288687950955096}
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 47db71f88a17f99468109bb15f76bab8, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 2653217213655714344}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 47db71f88a17f99468109bb15f76bab8, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 2277345274644005114}
+    - targetCorrespondingSourceObject: {fileID: -1397303492462338110, guid: 47db71f88a17f99468109bb15f76bab8, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 5249562578268981373}
+    - targetCorrespondingSourceObject: {fileID: -6923453667333933797, guid: 47db71f88a17f99468109bb15f76bab8, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 534781043606206615}
+  m_SourcePrefab: {fileID: 100100000, guid: 47db71f88a17f99468109bb15f76bab8, type: 3}
+--- !u!4 &2806261536616133164 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 7259823799755662946, guid: 47db71f88a17f99468109bb15f76bab8, type: 3}
+  m_PrefabInstance: {fileID: 4769809773984240718}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1 &3362503746949663628 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: -1397303492462338110, guid: 47db71f88a17f99468109bb15f76bab8, type: 3}
+  m_PrefabInstance: {fileID: 4769809773984240718}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &5249562578268981373
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3362503746949663628}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5ac90d4675d723b42b1b8eb7906b44aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::UFOClawCollisionDetector
+  armController: {fileID: 0}
+--- !u!4 &3710286077979709787 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 8163989492819723541, guid: 47db71f88a17f99468109bb15f76bab8, type: 3}
+  m_PrefabInstance: {fileID: 4769809773984240718}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1 &5688236983714408735 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: 47db71f88a17f99468109bb15f76bab8, type: 3}
+  m_PrefabInstance: {fileID: 4769809773984240718}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &2653217213655714344
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5688236983714408735}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5ac90d4675d723b42b1b8eb7906b44aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::UFOClawCollisionDetector
+  armController: {fileID: 0}
+--- !u!114 &2277345274644005114
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5688236983714408735}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 942565ab5cfee36499b074cf22bb2993, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::UFOClawData
+  fingerOpenAngle: 40
+  invertFingerAngle: 
+  fingerAngleOffsets: []
+  useCustomOpenTransform: 0
+  customOpenLocalPositions: []
+  customOpenLocalRotations: []
+--- !u!1 &6763059900083544405 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: -6923453667333933797, guid: 47db71f88a17f99468109bb15f76bab8, type: 3}
+  m_PrefabInstance: {fileID: 4769809773984240718}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &534781043606206615
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6763059900083544405}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5ac90d4675d723b42b1b8eb7906b44aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::UFOClawCollisionDetector
+  armController: {fileID: 0}

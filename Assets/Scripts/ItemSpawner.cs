@@ -66,6 +66,11 @@ public class ItemSpawner : MonoBehaviour
 
             yield return null; // 次のフレームまで待機
         }
+
+        // スポーン完了！全コインに「今から凍結チェックを始めていいよ」と通知する
+        // 3秒の余裕を加えて、最後のコインが落ち切るのを待つ
+        CoinOptimizer.freezeStartTime = Time.time + 3.0f;
+        Debug.Log($"[ItemSpawner] スポーン完了。{CoinOptimizer.freezeStartTime:F1}秒後から凍結チェック開始");
     }
 
     private void SpawnSingleItem(float totalRate)
@@ -106,12 +111,13 @@ public class ItemSpawner : MonoBehaviour
 
         // 生成
         GameObject spawnedObj = Instantiate(prefabToSpawn, randomPos, Random.rotation, parentFolder);
-        
-        // （必須ではないですが）生成された直後にコインが凍結するのを防ぐため、もしCoinOptimizerがついていれば起こす
-        CoinOptimizer optimizer = spawnedObj.GetComponent<CoinOptimizer>();
-        if (optimizer != null)
+
+        // プレハブのisKinematicがtrueになっていても必ず落下するよう強制解除する
+        Rigidbody spawnedRb = spawnedObj.GetComponent<Rigidbody>();
+        if (spawnedRb != null)
         {
-            optimizer.WakeUp(true);
+            spawnedRb.isKinematic = false;
+            spawnedRb.useGravity = true;
         }
     }
 }

@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.Events;
 using TMPro;
 
 /// <summary>
@@ -30,6 +31,10 @@ public class UpgradeItemController : MonoBehaviour
     public float costMultiplier = 1.2f;
     [Tooltip("購入ごとに価格に加算される固定値（例: 50なら毎回+50）")]
     public float costAdd = 0f;
+
+    [Header("イベント設定")]
+    [Tooltip("強化（レベルアップ）した瞬間に呼び出される処理（ここにUFOArmManagerなどをセットします）")]
+    public UnityEvent<int> onLevelUp;
 
     // 現在の状態
     private float _currentCost;
@@ -86,9 +91,10 @@ public class UpgradeItemController : MonoBehaviour
             Debug.Log($"[{itemName}] をLv{_currentLevel}に強化しました！ (消費: {_currentCost} / 残り: {MoneyManager.Instance.CurrentMoney})");
 
             // ==========================================
-            // TODO: ここに実際のキャッチャー交換・強化処理を書く
-            // 例: UFOArmManager.Instance.SetArmLevel(_currentLevel);
+            // イベントを発火して、外部のスクリプトに「レベルが上がったよ」と伝える
+            // Inspector上で UFOArmManager.SetArmLevel などを登録しておけば自動で実行されます
             // ==========================================
+            onLevelUp?.Invoke(_currentLevel);
 
             // 次のレベルの計算 または 売り切れ処理
             if (isOneTimePurchase || (maxLevel > 0 && _currentLevel >= maxLevel))

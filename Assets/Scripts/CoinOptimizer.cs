@@ -4,22 +4,44 @@ using UnityEngine;
 public class CoinOptimizer : MonoBehaviour
 {
     private Rigidbody rb;
-    private float checkInterval = 1.0f; // 1秒ごとに確認
-    private float sleepVelocity = 0.01f; // この速度以下なら「止まっている」と判定
-    private float coinThickness = 0.05f; // コインの厚み（環境に合わせて調整）
+    private Collider _col;
+    private float checkInterval = 1.0f;
+    private float sleepVelocity = 0.01f;
+    private float coinThickness = 0.05f;
+
+    /// <summary>
+    /// ItemSpawnerがスポーン完了時に設定する。
+    /// この時刻を過ぎるまで、全コインは絶対に凍結チェックを開始しない。
+    /// </summary>
+    public static float freezeStartTime = float.MaxValue;
+
+    // アームに叩き起こされている間は凍結を禁止するタイマー
+    // WakeUp()が呼ばれるたびにリセットされ、2秒間はIsSleeping()でも凍結しない
+    private float _keepAwakeTimer = 0f;
 
     void Start()
     {
         rb = GetComponent<Rigidbody>();
+        _col = GetComponent<Collider>();
         
         // 1万枚が同時に計算しないよう、最初の確認タイミングを0〜2秒の間でランダムにばらけさせる
         float randomStartDelay = Random.Range(0f, 2.0f);
         StartCoroutine(CheckAndFreezeRoutine(randomStartDelay));
     }
 
+    void Update()
+    {
+        if (_keepAwakeTimer > 0f)
+            _keepAwakeTimer -= Time.deltaTime;
+    }
+
     private IEnumerator CheckAndFreezeRoutine(float delay)
     {
-        // 最初のランダム待機（スポーン直後などに空中で凍結するのを防ぐため、最低でも1秒は確実に落下させる）
+        // スポーン完了時刻（freezeStartTime）を過ぎるまで待機する
+        // これにより「コインが降りかかっている途中」に空中で凍結するのを完全に防ぐ
+        yield return new WaitUntil(() => Time.time >= freezeStartTime);
+
+        // スポーン完了後にさら少し（1秒）待ってから開始（落下完了の余裕）
         yield return new WaitForSeconds(delay + 1.0f);
         
         // 毎回「new」するとゴミ（GC）が出るので、1秒待機する命令を使い回す（最適化の基本）
@@ -28,14 +50,11 @@ public class CoinOptimizer : MonoBehaviour
         // Kinematicになるまで、1秒に1回だけループし続ける
         while (!rb.isKinematic)
         {
-            // 速度がほぼゼロ（完全に止まった）か？
-            if (rb.linearVelocity.sqrMagnitude < sleepVelocity)
+            // Unity物理エンジンが「静止した」と判断 かつ アームから離れて2秒経過した場合のみ凍結
+            if (rb.IsSleeping() && _keepAwakeTimer <= 0f)
             {
-                // 止まっていれば無条件でKinematic（凍結）にして計算を止める！
                 rb.isKinematic = true;
-                
-                // ループを抜けて、定期確認コルーチン自体を終了させる
-                yield break; 
+                yield break;
             }
 
             // 1秒休んでから再確認
@@ -46,6 +65,11 @@ public class CoinOptimizer : MonoBehaviour
     // アームが近づいた時に外部から叩き起こすための処理
     public void WakeUp(bool isChain = false)
     {
+        // 叩き起こされたら2秒間は凍結しないようタイマーをリセット
+        // アームが近くにある間はWakeUpNearbyCoinsから定期的に呼ばれ続けるため
+        // アームから完全に離れるまで凍結しない
+        _keepAwakeTimer = 2.0f;
+
         if (rb != null && rb.isKinematic)
         {
             rb.isKinematic = false;

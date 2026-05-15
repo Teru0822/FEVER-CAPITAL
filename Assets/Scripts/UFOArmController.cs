@@ -156,51 +156,7 @@ public class UFOArmController : MonoBehaviour
         }
 
         // 爪の初期/開いた回転と座標を記録
-        if (fingerParts != null && fingerParts.Length > 0)
-        {
-            _fingerDefaultRot = new Quaternion[fingerParts.Length];
-            _fingerOpenRot    = new Quaternion[fingerParts.Length];
-            _fingerCurrentBaseRot = new Quaternion[fingerParts.Length];
-
-            _fingerDefaultPos = new Vector3[fingerParts.Length];
-            _fingerOpenPos = new Vector3[fingerParts.Length];
-            _fingerCurrentBasePos = new Vector3[fingerParts.Length];
-            
-            for (int i = 0; i < fingerParts.Length; i++)
-            {
-                if (fingerParts[i] == null) continue;
-                _fingerDefaultRot[i] = fingerParts[i].localRotation;
-                _fingerDefaultPos[i] = fingerParts[i].localPosition;
-                
-                _fingerCurrentBaseRot[i] = _fingerDefaultRot[i];
-                _fingerCurrentBasePos[i] = _fingerDefaultPos[i];
-
-                if (useCustomOpenTransform && i < customOpenLocalPositions.Length && i < customOpenLocalRotations.Length)
-                {
-                    // 個別の座標・角度を直接指定
-                    _fingerOpenPos[i] = customOpenLocalPositions[i];
-                    _fingerOpenRot[i] = Quaternion.Euler(customOpenLocalRotations[i]);
-                }
-                else
-                {
-                    // 従来の角度計算（座標は動かさない）
-                    _fingerOpenPos[i] = _fingerDefaultPos[i];
-                    
-                    float angle = fingerOpenAngle;
-                    if (invertFingerAngle != null && i < invertFingerAngle.Length && invertFingerAngle[i])
-                    {
-                        angle = -fingerOpenAngle;
-                    }
-
-                    Vector3 euler = new Vector3(angle, 0f, 0f);
-                    if (fingerAngleOffsets != null && i < fingerAngleOffsets.Length)
-                    {
-                        euler += fingerAngleOffsets[i];
-                    }
-                    _fingerOpenRot[i] = Quaternion.Euler(euler) * _fingerDefaultRot[i];
-                }
-            }
-        }
+        InitializeFingers();
 
         // その他揺らすパーツの初期回転を記録
         if (extraSwayParts != null && extraSwayParts.Length > 0)
@@ -265,15 +221,26 @@ public class UFOArmController : MonoBehaviour
         if (_wakeUpTimer > 0f) return;
         _wakeUpTimer = wakeUpInterval;
 
-        // 【修正】アーム周辺のコインを常に起こす（掴んで上昇中や移動中に凍結して空中に浮くのを完全に防ぐため）
-        Vector3 centerPos = (armRoot != null) ? armRoot.position : transform.position;
-        if (fingerParts != null && fingerParts.Length > 0 && fingerParts[0] != null)
-        {
-            centerPos = fingerParts[0].position;
-        }
+        if (fingerParts == null || fingerParts.Length == 0 || fingerParts[0] == null) return;
 
-        // インスペクターで設定した範囲内のコインを起こす
-        Collider[] hits = Physics.OverlapSphere(centerPos, wakeUpRadius);
+        // まずアームの中心（指の親オブジェクト）の周囲を起こす
+        Transform parentFolder = fingerParts[0].parent;
+        Vector3 centerPos = (parentFolder != null) ? parentFolder.position : transform.position;
+        WakeUpInSphere(centerPos, wakeUpRadius);
+
+        // さらに、それぞれの指の周囲も起こす（爪が大きく広がっているLv2やLv3の形状でも確実に起こすため）
+        foreach (Transform finger in fingerParts)
+        {
+            if (finger != null)
+            {
+                WakeUpInSphere(finger.position, wakeUpRadius);
+            }
+        }
+    }
+
+    private void WakeUpInSphere(Vector3 pos, float radius)
+    {
+        Collider[] hits = Physics.OverlapSphere(pos, radius);
         foreach (var hit in hits)
         {
             CoinOptimizer coin = hit.GetComponent<CoinOptimizer>();
@@ -499,6 +466,137 @@ public class UFOArmController : MonoBehaviour
                     _state = ArmState.Idle;
                 }
                 break;
+        }
+    }
+
+    // ─────────────────────────────────────
+    // アーム（指）の動的交換処理（シーン上のオブジェクトを切り替える版）
+    // ─────────────────────────────────────
+    public void ChangeClaw_InScene(GameObject activeClawObj)
+    {
+        if (activeClawObj == null) return;
+
+        // UFOClawData がついていれば、各種設定（開く角度など）を上書きする
+        UFOClawData data = activeClawObj.GetComponent<UFOClawData>();
+        if (data != null)
+        {
+            this.fingerOpenAngle = data.fingerOpenAngle;
+            this.useCustomOpenTransform = data.useCustomOpenTransform;
+
+            if (data.invertFingerAngle != null && data.invertFingerAngle.Length > 0)
+                this.invertFingerAngle = data.invertFingerAngle;
+
+            if (data.fingerAngleOffsets != null && data.fingerAngleOffsets.Length > 0)
+                this.fingerAngleOffsets = data.fingerAngleOffsets;
+
+            if (data.customOpenLocalPositions != null && data.customOpenLocalPositions.Length > 0)
+                this.customOpenLocalPositions = data.customOpenLocalPositions;
+
+            if (data.customOpenLocalRotations != null && data.customOpenLocalRotations.Length > 0)
+                this.customOpenLocalRotations = data.customOpenLocalRotations;
+        }
+
+        // 子オブジェクトたち（finger1, finger2...）を配列に登録し直す
+        int childCount = activeClawObj.transform.childCount;
+        fingerParts = new Transform[childCount];
+        for (int i = 0; i < childCount; i++)
+        {
+            fingerParts[i] = activeClawObj.transform.GetChild(i);
+        }
+
+        // もう一度初期化処理を走らせる
+        InitializeFingers();
+    }
+
+    // ─────────────────────────────────────
+    // アーム（指）の動的交換処理（プレハブ生成版・旧方式）
+    // ─────────────────────────────────────
+    public void ChangeClaw(GameObject newClawPrefab)
+    {
+        if (fingerParts == null || fingerParts.Length == 0 || fingerParts[0] == null) return;
+
+        // 今のfinger達の親（通常は "finger" という名前のオブジェクト）を取得
+        Transform parentFolder = fingerParts[0].parent;
+
+        // 既存の指（finger1〜4など）をすべて削除
+        foreach (Transform child in parentFolder)
+        {
+            Destroy(child.gameObject);
+        }
+
+        // 新しいアーム（プレハブ）を生成
+        GameObject newClawObj = Instantiate(newClawPrefab, parentFolder);
+        newClawObj.transform.localPosition = Vector3.zero;
+        newClawObj.transform.localRotation = Quaternion.identity;
+
+        // 新しいプレハブの中に UFOClawData がついていれば、各種設定（開く角度など）を上書きする
+        UFOClawData data = newClawObj.GetComponent<UFOClawData>();
+        if (data != null)
+        {
+            this.fingerOpenAngle = data.fingerOpenAngle;
+            this.invertFingerAngle = data.invertFingerAngle;
+            this.fingerAngleOffsets = data.fingerAngleOffsets;
+            this.useCustomOpenTransform = data.useCustomOpenTransform;
+            this.customOpenLocalPositions = data.customOpenLocalPositions;
+            this.customOpenLocalRotations = data.customOpenLocalRotations;
+        }
+
+        // プレハブの「子オブジェクト」たち（finger1, finger2...）を配列に登録し直す
+        int childCount = newClawObj.transform.childCount;
+        fingerParts = new Transform[childCount];
+        for (int i = 0; i < childCount; i++)
+        {
+            fingerParts[i] = newClawObj.transform.GetChild(i);
+        }
+
+        // もう一度初期化処理を走らせる
+        InitializeFingers();
+    }
+
+    public void InitializeFingers()
+    {
+        if (fingerParts != null && fingerParts.Length > 0)
+        {
+            _fingerDefaultRot = new Quaternion[fingerParts.Length];
+            _fingerOpenRot    = new Quaternion[fingerParts.Length];
+            _fingerCurrentBaseRot = new Quaternion[fingerParts.Length];
+
+            _fingerDefaultPos = new Vector3[fingerParts.Length];
+            _fingerOpenPos = new Vector3[fingerParts.Length];
+            _fingerCurrentBasePos = new Vector3[fingerParts.Length];
+            
+            for (int i = 0; i < fingerParts.Length; i++)
+            {
+                if (fingerParts[i] == null) continue;
+                _fingerDefaultRot[i] = fingerParts[i].localRotation;
+                _fingerDefaultPos[i] = fingerParts[i].localPosition;
+                
+                _fingerCurrentBaseRot[i] = _fingerDefaultRot[i];
+                _fingerCurrentBasePos[i] = _fingerDefaultPos[i];
+
+                if (useCustomOpenTransform && i < customOpenLocalPositions.Length && i < customOpenLocalRotations.Length)
+                {
+                    _fingerOpenPos[i] = customOpenLocalPositions[i];
+                    _fingerOpenRot[i] = Quaternion.Euler(customOpenLocalRotations[i]);
+                }
+                else
+                {
+                    _fingerOpenPos[i] = _fingerDefaultPos[i];
+                    
+                    float angle = fingerOpenAngle;
+                    if (invertFingerAngle != null && i < invertFingerAngle.Length && invertFingerAngle[i])
+                    {
+                        angle = -fingerOpenAngle;
+                    }
+
+                    Vector3 euler = new Vector3(angle, 0f, 0f);
+                    if (fingerAngleOffsets != null && i < fingerAngleOffsets.Length)
+                    {
+                        euler += fingerAngleOffsets[i];
+                    }
+                    _fingerOpenRot[i] = Quaternion.Euler(euler) * _fingerDefaultRot[i];
+                }
+            }
         }
     }
 }
