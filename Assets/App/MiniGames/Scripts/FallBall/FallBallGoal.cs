@@ -12,8 +12,8 @@ namespace MiniGames.FallBall
         [Tooltip("このゴールが通知を送る対象の GameManager")]
         [SerializeField] private FallBallGameManager gameManager;
         
-        [Tooltip("鉄球オブジェクトに付けられているタグ（デフォは 'Player' など）")]
-        [SerializeField] private string ballTag = "Player";
+        [Tooltip("鉄球オブジェクトに付けられているタグ")]
+        [SerializeField] private string ballTag = "Ball";
 
         private void OnTriggerEnter(Collider other)
         {
