@@ -71,6 +71,17 @@ namespace MiniGames.FallBall
                     Debug.LogError("🚨【重要エラー】Inspectorの『Operation Handle』にハンドルがドラッグ＆ドロップされていません！");
                 }
 
+                // ピボットが設定されている場合、棒をピボットの子オブジェクトにする
+                // これによりピボットを回転させると棒も連動して動く
+                if (leftPivot != null && leftBar != null && leftBar.parent != leftPivot)
+                {
+                    leftBar.SetParent(leftPivot, true); // worldPositionStays=true で位置を保持
+                }
+                if (rightPivot != null && rightBar != null && rightBar.parent != rightPivot)
+                {
+                    rightBar.SetParent(rightPivot, true);
+                }
+
                 if (parentRigidbody == null) parentRigidbody = GetComponent<Rigidbody>();
                 
                 if (parentRigidbody != null && !parentRigidbody.isKinematic)
