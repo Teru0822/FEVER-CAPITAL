@@ -19,13 +19,13 @@ namespace MiniGames.FallBall
         {
             Debug.Log($"FallBallOutZone: オブジェクト検知: {other.name}, Tag={other.tag}");
 
-            // 指定のタグか、あるいはRigidbodyを持っている（ボールである可能性が高い）場合
-            if (other.CompareTag(ballTag) || other.GetComponent<Rigidbody>() != null)
+            // 必ずタグが "Ball"（または指定の ballTag）であることを確認
+            // Rigidbodyがあるだけで消すと、アームなどが触れた際に誤作動するため
+            if (other.CompareTag(ballTag))
             {
                 if (gameManager != null)
                 {
-                    Debug.Log("FallBallOutZone: GameManagerにボール退出を通知します");
-                    // OnOutZoneReached ではなく OnBallExit を呼ぶ（GameManager側の実装に合わせる）
+                    Debug.Log($"FallBallOutZone: ボール {other.name} を検知。GameManagerに通知します");
                     gameManager.OnBallExit();
                 }
                 else

@@ -42,9 +42,24 @@ namespace MiniGames.FallBall
             
             if (ballObject != null)
             {
-                ballTemplate = ballObject;
-                initialBallPosition = ballTemplate.transform.position;
-                initialBallRotation = ballTemplate.transform.rotation;
+                // シーン内のオブジェクトが直接指定されている場合、Destroyされないようにテンプレートとして保持
+                // (プレハブでない場合は scene.name が入る)
+                if (ballObject.gameObject.scene.name != null)
+                {
+                    ballTemplate = ballObject;
+                    initialBallPosition = ballObject.transform.position;
+                    initialBallRotation = ballObject.transform.rotation;
+                    
+                    // シーン内の実体そのものが消えないよう、補充時はこれのクローンを作る
+                    // 最初の1個目を出す前に非表示にしておく
+                    ballObject.SetActive(false);
+                }
+                else
+                {
+                    ballTemplate = ballObject;
+                    initialBallPosition = transform.position;
+                    initialBallRotation = Quaternion.identity;
+                }
                 
                 if (refillController != null)
                 {
@@ -52,7 +67,6 @@ namespace MiniGames.FallBall
                 }
                 else
                 {
-                    ballTemplate.SetActive(false);
                     SpawnNewBall();
                 }
             }
