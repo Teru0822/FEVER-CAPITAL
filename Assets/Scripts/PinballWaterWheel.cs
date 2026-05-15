@@ -284,7 +284,17 @@ public class PinballWaterWheel : MonoBehaviour
                 if (_logTimer >= 0.5f)
                 {
                     _logTimer = 0f;
-                    Debug.Log($"[WaterWheel] plate0 phase={_phases[0]:F3} alwaysUpright={plateAlwaysUpright} worldRotEuler={worldRot.eulerAngles}", this);
+                    Vector3 t = ComputeTangent(_phases[0]);
+                    Vector3 o = Vector3.Cross(axisN, t);
+                    if (o.sqrMagnitude < 0.0001f) o = Vector3.up; else o = o.normalized;
+                    Debug.Log(
+                        $"[WaterWheel] plate0 phase={_phases[0]:F3} alwaysUpright={plateAlwaysUpright}\n" +
+                        $"  tangent(local)={t} outward(local)={o} axisN={axisN}\n" +
+                        $"  worldTangent={transform.TransformDirection(t)} worldOutward={transform.TransformDirection(o)}\n" +
+                        $"  worldRotEuler={worldRot.eulerAngles}\n" +
+                        $"  pathOffsetEuler={_pathRotationOffsets[0].eulerAngles}\n" +
+                        $"  shape={shape} pathLength={_pathLength:F3} radius={radius} stretchLength={stretchLength}",
+                        this);
                 }
             }
         }
