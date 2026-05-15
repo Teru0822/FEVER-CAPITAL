@@ -226,8 +226,14 @@ namespace MiniGames.FallBall
             GameObject newBall = Instantiate(ballTemplate, ballSpawnParent.position, ballSpawnParent.rotation, ballSpawnParent);
             newBall.name = "RefilledBall_" + Time.frameCount;
             
-            // 重要：親のスケールの影響を打ち消すためにスケールを明示的に再設定
-            newBall.transform.localScale = ballTemplate.transform.localScale;
+            // 重要：親のスケールの影響を完全に打ち消して、ワールドスケールを1(またはテンプレートと同じ)にする
+            Vector3 parentScale = ballSpawnParent.lossyScale;
+            Vector3 templateScale = ballTemplate.transform.localScale;
+            newBall.transform.localScale = new Vector3(
+                templateScale.x / (parentScale.x > 0 ? parentScale.x : 1f),
+                templateScale.y / (parentScale.y > 0 ? parentScale.y : 1f),
+                templateScale.z / (parentScale.z > 0 ? parentScale.z : 1f)
+            );
             
             newBall.SetActive(true);
             

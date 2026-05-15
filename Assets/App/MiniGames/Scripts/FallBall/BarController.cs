@@ -102,15 +102,15 @@ namespace MiniGames.FallBall
             {
                 Vector3 worldPoint = ray.GetPoint(enter);
                 float dist = Vector3.Distance(worldPoint, operationHandle.position);
-                if (dist < 1.0f) // 1メートル以内に拡大
+                if (dist < 2.5f) // 距離判定を大幅に緩和
                 {
-                    Debug.Log($"BarController: 距離判定({dist:F2})でハンドルを掴みました");
+                    Debug.Log($"BarController: 距離判定({dist:F2}m)でハンドルを掴みました");
                     StartDrag(ray);
                 }
                 else
                 {
-                    // 届かなかった場合もログを出して距離を教える
-                    if (dist < 5.0f) Debug.Log($"BarController: クリック位置が遠すぎます (距離: {dist:F2}m)");
+                    // それでも届かない場合のみ警告
+                    Debug.Log($"BarController: クリック位置がまだ遠いです (距離: {dist:F2}m / 2.5mまで許可)");
                 }
             }
         }
