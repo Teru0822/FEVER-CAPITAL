@@ -169,17 +169,17 @@ namespace MiniGames.FallBall
         {
             Debug.Log($"FallBallRefill: 補充アニメーション「{refillClip.name}」を開始します");
             
-            // 1. ボールをアームに固定して生成
-            GameObject newBall = SpawnBallInArm();
-
-            // 2. アニメーション再生
+            // 1. 先にアニメーション（空のアームの動き）を開始
             legacyAnimation.Play(refillClip.name);
             
-            // 3. アニメーション完了まで待機
-            yield return new WaitForSeconds(refillClip.length);
+            // 2. アニメーションが「放出ポイント」に来るまで待つ（全長の95%程度）
+            yield return new WaitForSeconds(refillClip.length * 0.95f);
 
-            // 4. 最後に切り離して物理を有効にする
-            ReleaseBall(newBall);
+            // 3. 放出ポイントでボールを「独立した状態」で生成
+            GameObject newBall = SpawnBallInArm();
+            
+            // 残りを待機
+            yield return new WaitForSeconds(refillClip.length * 0.05f);
             Debug.Log("FallBallRefill: 補充シーケンス完了");
         }
 
@@ -189,15 +189,16 @@ namespace MiniGames.FallBall
         private IEnumerator PlayShapeKeyRefill()
         {
             Debug.Log("FallBallRefill: シェイプキーによる補充を開始します");
-            GameObject newBall = SpawnBallInArm();
 
+            // 1. アームを下ろす・開く動き（ここではボールなし）
             yield return StartCoroutine(AnimateBlendShape(rodRenderer, rodBlendShapeIndex, 0f, 100f, extendDuration));
             yield return StartCoroutine(AnimateBlendShape(armRenderer, armBlendShapeIndex, 0f, 100f, openDuration));
 
+            // 2. 開ききったタイミングでボールを生成
             yield return new WaitForSeconds(dropDelay);
-            
-            ReleaseBall(newBall);
+            SpawnBallInArm();
 
+            // 3. アームを戻す
             StartCoroutine(AnimateBlendShape(armRenderer, armBlendShapeIndex, 100f, 0f, retractDuration));
             yield return StartCoroutine(AnimateBlendShape(rodRenderer, rodBlendShapeIndex, 100f, 0f, retractDuration));
         }
@@ -206,35 +207,22 @@ namespace MiniGames.FallBall
         {
             if (ballTemplate == null || ballSpawnParent == null) return null;
 
-            // テンプレートの保護
-            if (ballTemplate.activeInHierarchy && ballTemplate.scene.name != null)
-            {
-                ballTemplate.SetActive(false);
-            }
-
-            // 親（アーム）に固定して生成
-            GameObject newBall = Instantiate(ballTemplate, ballSpawnParent);
+            // 親を指定せず、放出ポイントの位置に直接生成（最初からはなす）
+            GameObject newBall = Instantiate(ballTemplate, ballSpawnParent.position, ballSpawnParent.rotation);
             newBall.name = "RefilledBall_" + Time.frameCount;
             
-            // アームの部品（棒など）と重なりにくいように少し下(Y)にずらす（串刺し防止）
-            newBall.transform.localPosition = new Vector3(0, -0.05f, 0);
-
-            // 重要：親のスケールの影響を完全に打ち消して、ワールド空間での大きさをテンプレートに合わせる
-            Vector3 parentScale = ballSpawnParent.lossyScale;
-            Vector3 templateScale = ballTemplate.transform.localScale;
-            newBall.transform.localScale = new Vector3(
-                templateScale.x / (parentScale.x > 0.0001f ? parentScale.x : 1f),
-                templateScale.y / (parentScale.y > 0.0001f ? parentScale.y : 1f),
-                templateScale.z / (parentScale.z > 0.0001f ? parentScale.z : 1f)
-            );
+            // 親がいないのでスケールはテンプレートのものをそのままコピー
+            newBall.transform.localScale = ballTemplate.transform.localScale;
             
             newBall.SetActive(true);
             
             Rigidbody rb = newBall.GetComponent<Rigidbody>();
             if (rb != null)
             {
-                rb.isKinematic = true; // 運んでいる間は物理無効
-                Debug.Log($"FallBallRefill: ボール生成完了: {newBall.name}, WorldScale={newBall.transform.lossyScale}");
+                rb.isKinematic = false; // 最初から物理を有効にする
+                rb.linearVelocity = Vector3.zero;
+                rb.angularVelocity = Vector3.zero;
+                Debug.Log($"FallBallRefill: ボールを独立生成しました: {newBall.name} at {newBall.transform.position}");
             }
             else
             {
