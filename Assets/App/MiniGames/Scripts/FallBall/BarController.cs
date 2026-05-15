@@ -29,6 +29,7 @@ namespace MiniGames.FallBall
         [SerializeField] private float handleMinX = -2.0f;
         [SerializeField] private float handleMaxX = 2.0f;
         [SerializeField] private float maxSteeringAngle = 30.0f;
+        [SerializeField] private bool invertSteering = false;
 
         [Header("Debug")]
         [SerializeField] private bool showDebugLogs = true;
@@ -179,6 +180,7 @@ namespace MiniGames.FallBall
             // 2. 傾き角の計算 (X軸)
             float tX = Mathf.InverseLerp(handleMinX, handleMaxX, operationHandle.localPosition.x);
             float steeringAngle = Mathf.Lerp(-maxSteeringAngle, maxSteeringAngle, tX);
+            if (invertSteering) steeringAngle = -steeringAngle;
 
             // 左右の棒を更新
             RotateBar(leftBar, leftPivot, leftBarInitialLocalPos, leftBarInitialLocalRot, -openingAngle, steeringAngle);
