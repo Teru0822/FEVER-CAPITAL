@@ -5,6 +5,8 @@ TagManager:
   serializedVersion: 3
   tags:
   - Splitter
+  - Enforce Pin
+  - Split Pin
   layers:
   - Default
   - TransparentFX
