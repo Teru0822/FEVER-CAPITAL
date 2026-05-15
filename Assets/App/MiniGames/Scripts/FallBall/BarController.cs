@@ -13,19 +13,23 @@ namespace MiniGames.FallBall
     public class BarController : MonoBehaviour
     {
         [Header("References")]
-        [Tooltip("左側の回転対象。支柱をピボットにする場合は支柱を設定し、棒を支柱の子にしてください")]
+        [Tooltip("左側の棒")]
         [SerializeField] private Transform leftBar;
-        [Tooltip("右側の回転対象。支柱をピボットにする場合は支柱を設定し、棒を支柱の子にしてください")]
+        [Tooltip("右側の棒")]
         [SerializeField] private Transform rightBar;
+        [Tooltip("左側の支柱（回転軸の位置として使用）")]
+        [SerializeField] private Transform leftPivot;
+        [Tooltip("右側の支柱（回転軸の位置として使用）")]
+        [SerializeField] private Transform rightPivot;
         [Tooltip("操作用の半透明のオブジェクト（ハンドルのTransform）")]
         [SerializeField] private Transform operationHandle;
 
         [Header("Physics Settings")]
         [Tooltip("棒全体の移動を物理的に行うためのRigidbody（IsKinematic推奨）")]
         [SerializeField] private Rigidbody parentRigidbody;
-        [Tooltip("左右エイムの対象。未設定の場合は自身(transform)を回転。全体が回転してしまう場合は専用の親オブジェクトを設定してください")]
+        [Tooltip("左右エイムの対象。未設定の場合は自身(transform)を回転")]
         [SerializeField] private Transform aimTarget;
-        [Tooltip("左右エイムを無効化する場合はチェックを外してください（デフォルト: OFF）")]
+        [Tooltip("左右エイムを無効化する場合はチェックを外してください")]
         [SerializeField] private bool enableYawAim = false;
 
         [Header("Settings (Rotation Aim)")]
@@ -62,16 +66,41 @@ namespace MiniGames.FallBall
         // ドラッグ開始時のベースとマウス位置とのズレを記憶
         private float dragOffsetZ;
 
+        // 棒の初期ワールド状態を保存
+        private Vector3 leftBarInitialPos;
+        private Quaternion leftBarInitialRot;
+        private Vector3 rightBarInitialPos;
+        private Quaternion rightBarInitialRot;
+
         void Start()
         {
             if (Application.isPlaying)
             {
+                Debug.Log($"BarController Start: isGameActive={isGameActive}");
+                
                 if (operationHandle == null)
                 {
                     Debug.LogError("🚨【重要エラー】Inspectorの『Operation Handle』にハンドルがドラッグ＆ドロップされていません！");
                 }
 
+                // ゲーム開始時のワールド座標と回転を完全に保存
+                if (leftBar != null)
+                {
+                    leftBarInitialPos = leftBar.position;
+                    leftBarInitialRot = leftBar.rotation;
+                }
+                if (rightBar != null)
+                {
+                    rightBarInitialPos = rightBar.position;
+                    rightBarInitialRot = rightBar.rotation;
+                }
+
                 if (parentRigidbody == null) parentRigidbody = GetComponent<Rigidbody>();
+                initialRotation = transform.localRotation;
+                currentYaw = 0f;
+            }
+            UpdateBarsState();
+        }
                 
                 if (parentRigidbody != null && !parentRigidbody.isKinematic)
                 {
@@ -208,6 +237,10 @@ namespace MiniGames.FallBall
                     Physics.SyncTransforms();
                 }
             }
+
+            // ゲームの状態に関わらず常に更新（デバッグ用）
+            UpdateBarsState();
+        }
         }
 
         private void FixedUpdate()
@@ -225,38 +258,54 @@ namespace MiniGames.FallBall
         {
             if (leftBar == null || rightBar == null || operationHandle == null) return;
 
-            // 支点からのハンドルの距離割合を計算 (0: 支点に一番近い, 1: 一番遠い)
-            float t = Mathf.InverseLerp(handleMinZ, handleMaxZ, operationHandle.localPosition.z);
-            
-            // 割合に応じて角度を決定（t=0 なら maxAngle[開く], t=1 なら minAngle[閉じる]）
+            float handleZ = operationHandle.localPosition.z;
+            float t = Mathf.InverseLerp(handleMinZ, handleMaxZ, handleZ);
             float currentAngle = Mathf.Lerp(maxAngle, minAngle, t);
-
-            float halfBaseGap = baseGap / 2f;
-
-            // ハンドルのローカルX, Yは常に中央(0)などに固定し、Z軸方向（前後）の動きだけに制限する
-            operationHandle.localPosition = new Vector3(0, operationHandle.localPosition.y, operationHandle.localPosition.z);
-
-            // leftBar / rightBar の localRotation を直接設定
-            // 支柱をピボットにしたい場合は、棒を支柱の子にして、ここに支柱を設定する
             float finalAngle = invertBarRotation ? -currentAngle : currentAngle;
-            leftBar.localRotation = Quaternion.Euler(0, -finalAngle, 0);
-            rightBar.localRotation = Quaternion.Euler(0, finalAngle, 0);
+
+            if (Time.frameCount % 60 == 0)
+            {
+                Debug.Log($"[BarController] Z={handleZ:F2}, Angle={finalAngle:F2}");
+            }
+
+            // 左の棒の制御
+            if (leftPivot != null)
+            {
+                leftBar.SetPositionAndRotation(leftBarInitialPos, leftBarInitialRot);
+                leftBar.RotateAround(leftPivot.position, transform.up, -finalAngle);
+            }
+            else
+            {
+                leftBar.localRotation = leftBarInitialRot * Quaternion.Euler(0, -finalAngle, 0);
+            }
+
+            // 右の棒の制御
+            if (rightPivot != null)
+            {
+                rightBar.SetPositionAndRotation(rightBarInitialPos, rightBarInitialRot);
+                rightBar.RotateAround(rightPivot.position, transform.up, finalAngle);
+            }
+            else
+            {
+                rightBar.localRotation = rightBarInitialRot * Quaternion.Euler(0, finalAngle, 0);
+            }
         }
 
         // ピボット（支点）の位置をエディタ上で可視化する
         private void OnDrawGizmos()
         {
             Gizmos.color = Color.red;
-            if (leftBar != null)
-            {
-                Gizmos.DrawSphere(leftBar.position, 0.1f);
-                Gizmos.DrawRay(leftBar.position, leftBar.forward * 2f);
-            }
-            if (rightBar != null)
-            {
-                Gizmos.DrawSphere(rightBar.position, 0.1f);
-                Gizmos.DrawRay(rightBar.position, rightBar.forward * 2f);
-            }
+            if (leftBar != null) Gizmos.DrawRay(leftBar.position, leftBar.forward * 2f);
+            if (rightBar != null) Gizmos.DrawRay(rightBar.position, rightBar.forward * 2f);
+
+            // 回転軸（ピボット）を青い球で表示
+            Gizmos.color = Color.blue;
+            if (leftPivot != null) Gizmos.DrawSphere(leftPivot.position, 0.05f);
+            if (rightPivot != null) Gizmos.DrawSphere(rightPivot.position, 0.05f);
+            
+            // 現在の回転軸（leftBarの現在位置）を赤い球で表示
+            Gizmos.color = Color.red;
+            if (leftBar != null) Gizmos.DrawSphere(leftBar.position, 0.03f);
         }
     }
 }
