@@ -2,10 +2,10 @@ using System.Collections;
 using UnityEngine;
 
 /// <summary>
-/// ピンボールの「5」オブジェクト (gen 0) 専用コントローラ。
-/// - Rigidbody + SphereCollider + OnCollisionEnter で動作
-/// - Splitter と衝突すると PinballBallManager に gen 1 の分裂子を生成依頼し、自身を破棄
-/// - gen ≥ 1 の挙動はすべて PinballBallManager が Jobs + Burst で一括管理する
+/// ピンボールのボールコントローラ (全世代共通)。
+/// - Rigidbody + SphereCollider + OnCollisionEnter で動作 (純 Unity 物理)
+/// - Splitter と衝突すると Manager に分裂子 (Rigidbody + Collider 付き) の生成を依頼し、自身を破棄
+/// - 各ボールは generation を保持し、Manager は parentGen から nextGen を計算する
 /// </summary>
 [RequireComponent(typeof(Rigidbody))]
 [RequireComponent(typeof(SphereCollider))]
@@ -77,6 +77,10 @@ public class PinballBallController : MonoBehaviour
     public float hideParticleXMax = 0.75f;
     public float hideParticleZMin = 4.515f;
 
+    [HideInInspector]
+    [Tooltip("このボールの世代 (0 = 初期、Manager がスポーン時に上書きする)")]
+    public int generation = 0;
+
     private bool _isSplitting = false;
 
     private Rigidbody rb;
@@ -86,9 +90,9 @@ public class PinballBallController : MonoBehaviour
     private bool _useManualGravity = false;
 
     private static int _ballLayer = -1;
-    private static bool _ballLayerCollisionDisabled = false;
+    private static bool _ballLayerCollisionConfigured = false;
 
-    /// <summary>現在シーンに存在する gen 0 ボールの数 (デバッグ用)</summary>
+    /// <summary>現在シーンに存在する全ボール数 (デバッグ・初期累計用)</summary>
     public static int AliveGen0Count { get; private set; }
 
     void OnEnable() { AliveGen0Count++; }
@@ -137,10 +141,12 @@ public class PinballBallController : MonoBehaviour
 
         gameObject.layer = _ballLayer;
 
-        if (!_ballLayerCollisionDisabled)
+        if (!_ballLayerCollisionConfigured)
         {
-            Physics.IgnoreLayerCollision(_ballLayer, _ballLayer, true);
-            _ballLayerCollisionDisabled = true;
+            // enableBallBallCollision = true ならボール同士の衝突 ON、false なら OFF
+            // (純物理時はデフォルト ON、ピンボールっぽい弾き合いを許可)
+            Physics.IgnoreLayerCollision(_ballLayer, _ballLayer, !enableBallBallCollision);
+            _ballLayerCollisionConfigured = true;
         }
     }
 
@@ -177,7 +183,7 @@ public class PinballBallController : MonoBehaviour
         yield return new WaitForFixedUpdate();
 
         float sphereRadiusWorld = sphereCol.bounds.extents.y;
-        PinballBallManager.Instance.ProduceGen1Children(this, posAtCollision, splitTargetCollider, sphereRadiusWorld);
+        PinballBallManager.Instance.ProduceChildren(this, generation, posAtCollision, splitTargetCollider, sphereRadiusWorld);
 
         Destroy(gameObject);
     }
