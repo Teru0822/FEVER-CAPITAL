@@ -102,10 +102,15 @@ namespace MiniGames.FallBall
             {
                 Vector3 worldPoint = ray.GetPoint(enter);
                 float dist = Vector3.Distance(worldPoint, operationHandle.position);
-                if (dist < 0.5f) 
+                if (dist < 1.0f) // 1メートル以内に拡大
                 {
                     Debug.Log($"BarController: 距離判定({dist:F2})でハンドルを掴みました");
                     StartDrag(ray);
+                }
+                else
+                {
+                    // 届かなかった場合もログを出して距離を教える
+                    if (dist < 5.0f) Debug.Log($"BarController: クリック位置が遠すぎます (距離: {dist:F2}m)");
                 }
             }
         }
@@ -183,6 +188,14 @@ namespace MiniGames.FallBall
             Gizmos.color = Color.red;
             if (leftBar != null) Gizmos.DrawSphere(leftBar.position, 0.03f);
             if (rightBar != null) Gizmos.DrawSphere(rightBar.position, 0.03f);
+
+            // ハンドルの当たり判定（クリックできる場所）を緑色で表示
+            if (operationHandle != null)
+            {
+                Gizmos.color = Color.green;
+                Gizmos.DrawWireCube(operationHandle.position, Vector3.one * 0.2f);
+                Gizmos.DrawLine(operationHandle.position, operationHandle.position + transform.up * 0.5f);
+            }
         }
     }
 }

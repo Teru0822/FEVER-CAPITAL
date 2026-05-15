@@ -222,15 +222,20 @@ namespace MiniGames.FallBall
                 ballTemplate.SetActive(false);
             }
 
+            // 親を指定して生成
             GameObject newBall = Instantiate(ballTemplate, ballSpawnParent.position, ballSpawnParent.rotation, ballSpawnParent);
             newBall.name = "RefilledBall_" + Time.frameCount;
+            
+            // 重要：親のスケールの影響を打ち消すためにスケールを明示的に再設定
+            newBall.transform.localScale = ballTemplate.transform.localScale;
+            
             newBall.SetActive(true);
             
             Rigidbody rb = newBall.GetComponent<Rigidbody>();
             if (rb != null)
             {
                 rb.isKinematic = true;
-                Debug.Log($"FallBallRefill: ボールを生成しました: {newBall.name} (Kinematic)");
+                Debug.Log($"FallBallRefill: ボール生成完了: {newBall.name}, Scale={newBall.transform.localScale}");
             }
             else
             {
