@@ -5,12 +5,22 @@ namespace MiniGames.FallBall
 {
     /// <summary>
     /// 鉄球落としのボール補充アニメーションを管理するクラス。
-    /// シェイプキーを使って昇降棒の伸縮とアームの開閉を制御し、
-    /// ボールを棒の上に配置するシーケンスを実行します。
+    /// 
+    /// 2つのモードに対応:
+    /// 1. Animator モード: Blender の「Scene」アニメーションクリップを再生して補充動作を行う
+    /// 2. シェイプキーモード: スクリプトからシェイプキーを制御して補充動作を行う
+    /// 
+    /// Animator が設定されていればそちらを優先し、なければシェイプキーモードを使用します。
     /// </summary>
     public class FallBallRefillController : MonoBehaviour
     {
-        [Header("シェイプキー対象")]
+        [Header("モード選択")]
+        [Tooltip("Animator による補充アニメーション（Blender の Scene クリップ等）。設定すると優先的に使用します")]
+        [SerializeField] private Animator refillAnimator;
+        [Tooltip("Animator で再生するステート名（デフォルト: Scene）")]
+        [SerializeField] private string animationStateName = "Scene";
+
+        [Header("シェイプキー対象（Animator 未使用時）")]
         [Tooltip("昇降棒（円柱）の SkinnedMeshRenderer")]
         [SerializeField] private SkinnedMeshRenderer rodRenderer;
         
@@ -24,7 +34,7 @@ namespace MiniGames.FallBall
         [Tooltip("ボールの初期配置先（アームの Transform）")]
         [SerializeField] private Transform ballSpawnParent;
 
-        [Header("タイミング設定")]
+        [Header("タイミング設定（シェイプキーモード用）")]
         [Tooltip("昇降棒が伸びる時間（秒）")]
         [SerializeField] private float extendDuration = 1.0f;
         
@@ -49,13 +59,12 @@ namespace MiniGames.FallBall
 
         private void Start()
         {
-            // シェイプキー「キー１」のインデックスを自動取得
+            // シェイプキーモード用: インデックスを自動取得
             if (rodRenderer != null)
             {
                 rodBlendShapeIndex = FindBlendShapeIndex(rodRenderer, "キー１");
                 if (rodBlendShapeIndex < 0)
                 {
-                    // 見つからない場合はインデックス0をフォールバックとして使用
                     Debug.LogWarning("FallBallRefill: 昇降棒のシェイプキー「キー１」が見つかりません。インデックス0を使用します。");
                     rodBlendShapeIndex = 0;
                 }
@@ -69,12 +78,6 @@ namespace MiniGames.FallBall
                     Debug.LogWarning("FallBallRefill: アームのシェイプキー「キー１」が見つかりません。インデックス0を使用します。");
                     armBlendShapeIndex = 0;
                 }
-            }
-
-            // テンプレートを非表示にする
-            if (ballTemplate != null)
-            {
-                ballTemplate.SetActive(false);
             }
         }
 
@@ -104,58 +107,116 @@ namespace MiniGames.FallBall
 
         /// <summary>
         /// ボール補充シーケンスを実行するコルーチン。
-        /// 1. ボールをアーム内にスポーン
-        /// 2. 昇降棒を伸ばす（アーム下降）
-        /// 3. アームを開く（ボールを離す）
-        /// 4. アームを閉じつつ昇降棒を縮める（元に戻る）
+        /// Animator が設定されていればアニメーションクリップで実行し、
+        /// なければシェイプキーで実行します。
         /// </summary>
         public IEnumerator PlayRefillSequence()
         {
             if (IsRefilling) yield break;
             IsRefilling = true;
 
-            // --- フェーズ 1: ボールをアーム内にスポーン ---
-            GameObject newBall = null;
-            if (ballTemplate != null && ballSpawnParent != null)
+            if (refillAnimator != null)
             {
-                newBall = Instantiate(ballTemplate, ballSpawnParent);
-                newBall.SetActive(true);
-                newBall.transform.localPosition = Vector3.zero;
-                
-                // 物理演算を一時停止（アームに乗せたまま移動するため）
-                Rigidbody rb = newBall.GetComponent<Rigidbody>();
-                if (rb != null) rb.isKinematic = true;
+                // --- Animator モード ---
+                yield return StartCoroutine(PlayAnimatorRefill());
             }
-
-            // --- フェーズ 2: 昇降棒を伸ばす（アーム下降） ---
-            yield return StartCoroutine(AnimateBlendShape(rodRenderer, rodBlendShapeIndex, 0f, 100f, extendDuration));
-
-            // --- フェーズ 3: アームを開く ---
-            yield return StartCoroutine(AnimateBlendShape(armRenderer, armBlendShapeIndex, 0f, 100f, openDuration));
-
-            // --- フェーズ 4: ボールを離す ---
-            if (newBall != null)
+            else
             {
-                // 少し待機してからボールを離す
-                yield return new WaitForSeconds(dropDelay);
-                
-                // 親を解除して自由にする
-                newBall.transform.SetParent(null);
-                
-                // 物理演算を有効化
-                Rigidbody rb = newBall.GetComponent<Rigidbody>();
-                if (rb != null)
-                {
-                    rb.isKinematic = false;
-                    rb.linearVelocity = Vector3.zero;
-                }
+                // --- シェイプキーモード ---
+                yield return StartCoroutine(PlayShapeKeyRefill());
             }
-
-            // --- フェーズ 5: アームを閉じつつ昇降棒を縮める（同時実行） ---
-            StartCoroutine(AnimateBlendShape(armRenderer, armBlendShapeIndex, 100f, 0f, retractDuration));
-            yield return StartCoroutine(AnimateBlendShape(rodRenderer, rodBlendShapeIndex, 100f, 0f, retractDuration));
 
             IsRefilling = false;
+        }
+
+        /// <summary>
+        /// Animator を使った補充アニメーション。
+        /// Blender の「Scene」クリップを再生し、完了を待ちます。
+        /// </summary>
+        private IEnumerator PlayAnimatorRefill()
+        {
+            // ボールをアーム内にスポーン
+            GameObject newBall = SpawnBallInArm();
+
+            // アニメーション再生
+            refillAnimator.Play(animationStateName, 0, 0f);
+            
+            // アニメーションの開始を1フレーム待つ
+            yield return null;
+
+            // アニメーションの完了を待つ
+            AnimatorStateInfo stateInfo = refillAnimator.GetCurrentAnimatorStateInfo(0);
+            while (stateInfo.normalizedTime < 1.0f)
+            {
+                stateInfo = refillAnimator.GetCurrentAnimatorStateInfo(0);
+                yield return null;
+            }
+
+            // ボールを離す
+            ReleaseBall(newBall);
+        }
+
+        /// <summary>
+        /// シェイプキーを使った補充アニメーション。
+        /// </summary>
+        private IEnumerator PlayShapeKeyRefill()
+        {
+            // ボールをアーム内にスポーン
+            GameObject newBall = SpawnBallInArm();
+
+            // フェーズ 1: 昇降棒を伸ばす（アーム下降）
+            yield return StartCoroutine(AnimateBlendShape(rodRenderer, rodBlendShapeIndex, 0f, 100f, extendDuration));
+
+            // フェーズ 2: アームを開く
+            yield return StartCoroutine(AnimateBlendShape(armRenderer, armBlendShapeIndex, 0f, 100f, openDuration));
+
+            // フェーズ 3: ボールを離す
+            yield return new WaitForSeconds(dropDelay);
+            ReleaseBall(newBall);
+
+            // フェーズ 4: アームを閉じつつ昇降棒を縮める（同時実行）
+            StartCoroutine(AnimateBlendShape(armRenderer, armBlendShapeIndex, 100f, 0f, retractDuration));
+            yield return StartCoroutine(AnimateBlendShape(rodRenderer, rodBlendShapeIndex, 100f, 0f, retractDuration));
+        }
+
+        /// <summary>
+        /// ボールをアーム内にスポーンします。
+        /// </summary>
+        private GameObject SpawnBallInArm()
+        {
+            if (ballTemplate == null || ballSpawnParent == null) return null;
+
+            // テンプレートが表示されている場合は非表示にする（初回のみ）
+            if (ballTemplate.activeSelf)
+            {
+                ballTemplate.SetActive(false);
+            }
+
+            GameObject newBall = Instantiate(ballTemplate, ballSpawnParent);
+            newBall.SetActive(true);
+            newBall.transform.localPosition = Vector3.zero;
+            
+            // 物理演算を一時停止（アームに乗せたまま移動するため）
+            Rigidbody rb = newBall.GetComponent<Rigidbody>();
+            if (rb != null) rb.isKinematic = true;
+
+            return newBall;
+        }
+
+        /// <summary>
+        /// ボールをアームから離して自由落下させます。
+        /// </summary>
+        private void ReleaseBall(GameObject ball)
+        {
+            if (ball == null) return;
+
+            ball.transform.SetParent(null);
+            Rigidbody rb = ball.GetComponent<Rigidbody>();
+            if (rb != null)
+            {
+                rb.isKinematic = false;
+                rb.linearVelocity = Vector3.zero;
+            }
         }
 
         /// <summary>
@@ -170,14 +231,12 @@ namespace MiniGames.FallBall
             {
                 elapsed += Time.deltaTime;
                 float t = Mathf.Clamp01(elapsed / duration);
-                // SmoothStep で自然な加減速を付ける
                 float smoothT = Mathf.SmoothStep(0f, 1f, t);
                 float value = Mathf.Lerp(from, to, smoothT);
                 renderer.SetBlendShapeWeight(index, value);
                 yield return null;
             }
             
-            // 最終値を確実にセット
             renderer.SetBlendShapeWeight(index, to);
         }
     }

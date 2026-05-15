@@ -40,15 +40,21 @@ namespace MiniGames.FallBall
         {
             if (ballObject != null)
             {
-                // 元のオブジェクトを非表示にしてテンプレート化（削除されて参照が消えるのを防ぐ）
                 ballTemplate = ballObject;
-                ballTemplate.SetActive(false);
-                
                 initialBallPosition = ballTemplate.transform.position;
                 initialBallRotation = ballTemplate.transform.rotation;
                 
-                // 最初に1つだけ表示用として出す
-                SpawnNewBall();
+                if (refillController != null)
+                {
+                    // RefillController がある場合: 最初のボールはアーム内に表示したまま。
+                    // スペースキーで補充シーケンスが走る。
+                }
+                else
+                {
+                    // RefillController がない場合: 従来の動作（テンプレート化してスポーン）
+                    ballTemplate.SetActive(false);
+                    SpawnNewBall();
+                }
             }
         }
 

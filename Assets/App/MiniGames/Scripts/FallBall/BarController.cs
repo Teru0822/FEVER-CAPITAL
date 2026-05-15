@@ -13,10 +13,14 @@ namespace MiniGames.FallBall
     public class BarController : MonoBehaviour
     {
         [Header("References")]
-        [Tooltip("左側の棒のTransform（原点が上部の支点にあること）")]
+        [Tooltip("左側の棒のTransform")]
         [SerializeField] private Transform leftBar;
-        [Tooltip("右側の棒のTransform（原点が上部の支点にあること）")]
+        [Tooltip("右側の棒のTransform")]
         [SerializeField] private Transform rightBar;
+        [Tooltip("左側の支柱（ピボット）。設定すると棒の代わりにこちらを回転させます")]
+        [SerializeField] private Transform leftPivot;
+        [Tooltip("右側の支柱（ピボット）。設定すると棒の代わりにこちらを回転させます")]
+        [SerializeField] private Transform rightPivot;
         [Tooltip("操作用の半透明のオブジェクト（ハンドルのTransform）")]
         [SerializeField] private Transform operationHandle;
 
@@ -228,9 +232,12 @@ namespace MiniGames.FallBall
             operationHandle.localPosition = new Vector3(0, operationHandle.localPosition.y, operationHandle.localPosition.z);
 
             // Y軸を中心にローカル回転させてV字にする（奥が支点前提）
+            // ピボットが設定されていればピボットを回転、なければ棒を直接回転
             float finalAngle = invertBarRotation ? -currentAngle : currentAngle;
-            leftBar.localRotation = Quaternion.Euler(0, -finalAngle, 0);
-            rightBar.localRotation = Quaternion.Euler(0, finalAngle, 0);
+            Transform leftTarget = leftPivot != null ? leftPivot : leftBar;
+            Transform rightTarget = rightPivot != null ? rightPivot : rightBar;
+            leftTarget.localRotation = Quaternion.Euler(0, -finalAngle, 0);
+            rightTarget.localRotation = Quaternion.Euler(0, finalAngle, 0);
         }
 
         // ピボット（支点）の位置をエディタ上で可視化する
