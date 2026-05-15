@@ -10,6 +10,9 @@ public class UFOArmController : MonoBehaviour
 
     // ─────────────────────────────────────
     [Header("アーム参照")]
+    [Tooltip("UFOキャッチャー本体の大元のオブジェクト（枠の基準になります）")]
+    public Transform machineRoot;
+
     [Tooltip("アーム全体を動かす親Transform（オブジェクト3 か、3を子に持つ空オブジェクト）")]
     public Transform armRoot;
 
@@ -27,7 +30,7 @@ public class UFOArmController : MonoBehaviour
     [Tooltip("レバー入力に対するアーム移動速度")]
     public float moveSpeed = 3f;
     [Header("移動範囲の指定（Sceneビューで赤い枠が見えます）")]
-    public Vector2 playAreaCenter = new Vector2(0f, 0f); // Xが左右、YがZ(奥手前)方向
+    public Vector2 playAreaCenter = new Vector2(0f, 0f); // 中心からのズレ（Xが左右、Yが奥手前）
     public Vector2 playAreaSize   = new Vector2(9f, 9f);
 
     // ─────────────────────────────────────
@@ -82,6 +85,7 @@ public class UFOArmController : MonoBehaviour
     // 内部状態
     private ArmState _state = ArmState.Idle;
     private Vector2  _leverInput;
+    private Vector3  _machineBasePos; // スクリプトがついているオブジェクトの初期座標
     private Vector3  _armInitialPos;
     private Vector3  _rail1InitialPos;
     private Vector3  _rail2InitialPos;
@@ -137,6 +141,9 @@ public class UFOArmController : MonoBehaviour
     // ─────────────────────────────────────
     void Start()
     {
+        // 基準点を明確にする（指定があればそれ、なければ自分自身）
+        _machineBasePos = (machineRoot != null) ? machineRoot.position : transform.position;
+
         if (armRoot != null) _armInitialPos = armRoot.position;
         if (armRoot != null && stretchRope != null)
         {
@@ -251,7 +258,6 @@ public class UFOArmController : MonoBehaviour
         WakeUpNearbyCoins();
     }
 
-    // アーム周辺の「最適化で凍結(Kinematic)したコイン」を叩き起こす
     void WakeUpNearbyCoins()
     {
         // 処理落ちを防ぐため、常に実行するのではなく一定時間ごと（例: 0.2秒ごと）に実行する
@@ -259,24 +265,21 @@ public class UFOArmController : MonoBehaviour
         if (_wakeUpTimer > 0f) return;
         _wakeUpTimer = wakeUpInterval;
 
-        // 下降中、および掴み動作の時のみコインを起こす（横移動中などは不要）
-        if (_state == ArmState.Descending || _state == ArmState.PostCollisionDescending || _state == ArmState.Grabbing)
+        // 【修正】アーム周辺のコインを常に起こす（掴んで上昇中や移動中に凍結して空中に浮くのを完全に防ぐため）
+        Vector3 centerPos = (armRoot != null) ? armRoot.position : transform.position;
+        if (fingerParts != null && fingerParts.Length > 0 && fingerParts[0] != null)
         {
-            Vector3 centerPos = (armRoot != null) ? armRoot.position : transform.position;
-            if (fingerParts != null && fingerParts.Length > 0 && fingerParts[0] != null)
-            {
-                centerPos = fingerParts[0].position;
-            }
+            centerPos = fingerParts[0].position;
+        }
 
-            // インスペクターで設定した範囲内のコインを起こす
-            Collider[] hits = Physics.OverlapSphere(centerPos, wakeUpRadius);
-            foreach (var hit in hits)
+        // インスペクターで設定した範囲内のコインを起こす
+        Collider[] hits = Physics.OverlapSphere(centerPos, wakeUpRadius);
+        foreach (var hit in hits)
+        {
+            CoinOptimizer coin = hit.GetComponent<CoinOptimizer>();
+            if (coin != null)
             {
-                CoinOptimizer coin = hit.GetComponent<CoinOptimizer>();
-                if (coin != null)
-                {
-                    coin.WakeUp();
-                }
+                coin.WakeUp();
             }
         }
     }
@@ -297,11 +300,16 @@ public class UFOArmController : MonoBehaviour
         // ピボットではなく、「実際の見た目の中心座標（visualPos）」を算出してClamp判定を行う
         Vector3 visualPos = pos + _visualOffset;
 
-        // 手動で設定した赤い枠(Gizmos)の範囲内に強制クリップ
+        // 移動範囲の中心座標を決定
+        Vector3 centerPos = _machineBasePos;
+
         float halfX = playAreaSize.x / 2f;
         float halfZ = playAreaSize.y / 2f;
-        visualPos.x = Mathf.Clamp(visualPos.x, playAreaCenter.x - halfX, playAreaCenter.x + halfX);
-        visualPos.z = Mathf.Clamp(visualPos.z, playAreaCenter.y - halfZ, playAreaCenter.y + halfZ);
+        float limitCenterX = centerPos.x + playAreaCenter.x;
+        float limitCenterZ = centerPos.z + playAreaCenter.y;
+
+        visualPos.x = Mathf.Clamp(visualPos.x, limitCenterX - halfX, limitCenterX + halfX);
+        visualPos.z = Mathf.Clamp(visualPos.z, limitCenterZ - halfZ, limitCenterZ + halfZ);
 
         // Clampされた見た目の座標から、再びピボットの座標を逆算して適用する
         pos = visualPos - _visualOffset;

@@ -43,12 +43,12 @@ public class CoinDataManager : MonoBehaviour
 
         CoinSaveData saveData = new CoinSaveData();
 
-        // フォルダの中にあるすべてのコインの位置と角度をリストに記録
+        // フォルダの中にあるすべてのコインの【ローカル】位置と角度をリストに記録（筐体を動かしてもズレないため）
         foreach (Transform child in editorCoinsFolder)
         {
             CoinData data = new CoinData();
-            data.position = child.position;
-            data.rotation = child.rotation;
+            data.position = child.localPosition;
+            data.rotation = child.localRotation;
             saveData.coins.Add(data);
         }
 
@@ -84,6 +84,8 @@ public class CoinDataManager : MonoBehaviour
             : loadData.coins.Count;
 
         Transform runtimeFolder = new GameObject("RuntimeCoinsFolder").transform;
+        // 筐体の子オブジェクトに設定することで、筐体を移動させてもコインが付いてくるようにする
+        runtimeFolder.SetParent(this.transform, false);
 
         int count = 0;
         int spawnPerFrame = 500;
@@ -91,7 +93,9 @@ public class CoinDataManager : MonoBehaviour
         for (int i = 0; i < limit; i++)
         {
             CoinData data = loadData.coins[i];
-            Instantiate(coinPrefab, data.position, data.rotation, runtimeFolder);
+            GameObject coin = Instantiate(coinPrefab, runtimeFolder);
+            coin.transform.localPosition = data.position;
+            coin.transform.localRotation = data.rotation;
             count++;
 
             if (count % spawnPerFrame == 0)

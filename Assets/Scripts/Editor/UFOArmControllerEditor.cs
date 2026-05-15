@@ -13,9 +13,16 @@ public class UFOArmControllerEditor : Editor
     {
         UFOArmController arm = (UFOArmController)target;
 
+        // 基準座標の決定
+        Vector3 basePos = arm.transform.position;
+        if (arm.machineRoot != null)
+        {
+            basePos = arm.machineRoot.position;
+        }
+
         // レバー等のプレイ中ではない時の高さ基準として少し浮かせる（あればアームルートの高さに合わせる）
-        float y = (arm.armRoot != null) ? arm.armRoot.position.y : 0f;
-        Vector3 center = new Vector3(arm.playAreaCenter.x, y, arm.playAreaCenter.y);
+        float y = (arm.armRoot != null) ? arm.armRoot.position.y : basePos.y;
+        Vector3 center = new Vector3(basePos.x + arm.playAreaCenter.x, y, basePos.z + arm.playAreaCenter.y);
         Vector3 size = new Vector3(arm.playAreaSize.x, 0.1f, arm.playAreaSize.y);
 
         _boundsHandle.center = center;
@@ -36,8 +43,8 @@ public class UFOArmControllerEditor : Editor
             // Ctrl+Z（Undo）に対応させる
             Undo.RecordObject(arm, "Change UFO Arm Play Area");
             
-            // 変更された数値を本体のControllerに適用
-            arm.playAreaCenter = new Vector2(_boundsHandle.center.x, _boundsHandle.center.z);
+            // 変更された数値を本体のControllerに適用（ベースからの相対的なズレとして保存）
+            arm.playAreaCenter = new Vector2(_boundsHandle.center.x - basePos.x, _boundsHandle.center.z - basePos.z);
             arm.playAreaSize = new Vector2(_boundsHandle.size.x, _boundsHandle.size.z);
         }
     }
