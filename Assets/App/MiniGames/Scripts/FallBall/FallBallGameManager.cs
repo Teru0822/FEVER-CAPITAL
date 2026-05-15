@@ -159,6 +159,7 @@ namespace MiniGames.FallBall
         /// </summary>
         public void OnGoalReached()
         {
+            Debug.Log("FallBall: ゴールに到達！成功です！");
             if (isFinished && !allowContinuousPlay) return;
             isFinished = true;
             
