@@ -13,16 +13,24 @@ namespace MiniGames.FallBall
         [SerializeField] private FallBallGameManager gameManager;
         
         [Tooltip("鉄球オブジェクトのタグ")]
-        [SerializeField] private string ballTag = "Player";
+        [SerializeField] private string ballTag = "Ball";
 
         private void OnTriggerEnter(Collider other)
         {
-            if (other.CompareTag(ballTag))
+            Debug.Log($"FallBallOutZone: オブジェクト検知: {other.name}, Tag={other.tag}");
+
+            // 指定のタグか、あるいはRigidbodyを持っている（ボールである可能性が高い）場合
+            if (other.CompareTag(ballTag) || other.GetComponent<Rigidbody>() != null)
             {
                 if (gameManager != null)
                 {
-                    // GameManagerの失敗処理を呼び出す
-                    gameManager.OnOutZoneReached();
+                    Debug.Log("FallBallOutZone: GameManagerにボール退出を通知します");
+                    // OnOutZoneReached ではなく OnBallExit を呼ぶ（GameManager側の実装に合わせる）
+                    gameManager.OnBallExit();
+                }
+                else
+                {
+                    Debug.LogWarning("FallBallOutZone: gameManager がアタッチされていません！");
                 }
 
                 // ボールを消去する

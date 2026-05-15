@@ -153,20 +153,29 @@ namespace MiniGames.FallBall
 
         /// <summary>
         /// ボールが場外に落ちた（失敗）ときに呼ばれる。
-        /// 床などに配置したTriggerコライダーから呼び出す想定。
         /// </summary>
         public void OnOutZoneReached()
         {
+            // 自動再生成を有効にするため、ここでは単にログを出して再生成ルーチンを呼ぶ
+            Debug.Log("FallBall: ボールが場外に落ちました");
+            OnBallExit();
+        }
+
+        /// <summary>
+        /// ボールがシーンから消えた（アウトまたはゴール）際に、次のボールを出すための通知。
+        /// </summary>
+        public void OnBallExit()
+        {
             if (isFinished && !allowContinuousPlay) return;
-            isFinished = true;
             
-            if (!allowContinuousPlay && barController != null)
-            {
-                barController.SetActive(false);
-            }
-            
-            Debug.Log("FallBall: Dropped outside! Failed.");
-            OnGameCompleted?.Invoke(false, 0f);
+            Debug.Log("FallBall: ボール退出検知。1秒後に再出現させます。");
+            StartCoroutine(WaitAndSpawnBall());
+        }
+
+        private System.Collections.IEnumerator WaitAndSpawnBall()
+        {
+            yield return new WaitForSeconds(1.0f);
+            SpawnNewBall();
         }
     }
 }
