@@ -167,23 +167,19 @@ namespace MiniGames.FallBall
         /// </summary>
         private IEnumerator PlayClipRefill()
         {
-            // ボールをアーム内にスポーン
-            GameObject newBall = SpawnBallInArm();
-
-            // アニメーション再生
-            Debug.Log($"FallBallRefill: アニメーション「{refillClip.name}」を再生開始");
+            // 1. 先にアニメーション再生を開始
+            Debug.Log($"FallBallRefill: 補充アニメーション「{refillClip.name}」を開始します");
             legacyAnimation.Play(refillClip.name);
             
-            // 再生状態を確認
-            bool isPlaying = legacyAnimation.IsPlaying(refillClip.name);
-            Debug.Log($"FallBallRefill: IsPlaying = {isPlaying}");
+            // 2. アニメーションが「ボールを離す位置」に来るまで待機（とりあえず全長の90%付近）
+            yield return new WaitForSeconds(refillClip.length * 0.9f);
 
-            // アニメーション完了を待つ
-            yield return new WaitForSeconds(refillClip.length);
-            Debug.Log($"FallBallRefill: アニメーション完了を検知しました ({refillClip.length}秒経過)");
-
-            // ボールを離す
-            ReleaseBall(newBall);
+            // 3. ボールをスポーンして落とす（親子関係なし）
+            GameObject newBall = SpawnBallInArm();
+            
+            // 残りの時間を待機
+            yield return new WaitForSeconds(refillClip.length * 0.1f);
+            Debug.Log("FallBallRefill: 補充シーケンス完了");
         }
 
         /// <summary>
@@ -191,14 +187,17 @@ namespace MiniGames.FallBall
         /// </summary>
         private IEnumerator PlayShapeKeyRefill()
         {
-            GameObject newBall = SpawnBallInArm();
+            Debug.Log("FallBallRefill: シェイプキーによる補充を開始します");
 
+            // 1. アームを下ろす・開く動き
             yield return StartCoroutine(AnimateBlendShape(rodRenderer, rodBlendShapeIndex, 0f, 100f, extendDuration));
             yield return StartCoroutine(AnimateBlendShape(armRenderer, armBlendShapeIndex, 0f, 100f, openDuration));
 
+            // 2. ボールをスポーンして落とす
             yield return new WaitForSeconds(dropDelay);
-            ReleaseBall(newBall);
+            SpawnBallInArm();
 
+            // 3. アームを戻す
             StartCoroutine(AnimateBlendShape(armRenderer, armBlendShapeIndex, 100f, 0f, retractDuration));
             yield return StartCoroutine(AnimateBlendShape(rodRenderer, rodBlendShapeIndex, 100f, 0f, retractDuration));
         }

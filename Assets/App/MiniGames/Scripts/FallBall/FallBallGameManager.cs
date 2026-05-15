@@ -48,8 +48,7 @@ namespace MiniGames.FallBall
                 
                 if (refillController != null)
                 {
-                    Debug.Log("FallBallGameManager: 起動時の自動補充を開始します。");
-                    SpawnNewBall();
+                    StartCoroutine(InitialRefill());
                 }
                 else
                 {
@@ -61,6 +60,14 @@ namespace MiniGames.FallBall
             {
                 Debug.LogWarning("FallBallGameManager: ballObject が設定されていません！");
             }
+        }
+
+        private System.Collections.IEnumerator InitialRefill()
+        {
+            // 起動直後だとアニメーションが正しく開始されない場合があるため、1フレーム待つ
+            yield return null;
+            Debug.Log("FallBallGameManager: 起動時の自動補充（アニメーション付き）を実行します。");
+            SpawnNewBall();
         }
 
         private void Update()
