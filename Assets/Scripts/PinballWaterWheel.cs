@@ -34,11 +34,19 @@ public class PinballWaterWheel : MonoBehaviour
     [SerializeField] private Vector3 stretchAxis = Vector3.up;
 
     [Header("皿")]
-    [Tooltip("回転させる皿 Transform 群")]
+    [Tooltip("回転させる皿 Transform 群。手動配置する場合に使用。\n下の Plate Prefab + Auto Spawn Plate Count を指定すると自動配置に切替 (この配列は上書き)")]
     [SerializeField] private Transform[] plates;
 
     [Tooltip("各皿に Kinematic Rigidbody を Awake で自動付与する")]
     [SerializeField] private bool autoAddKinematicRigidbody = true;
+
+    [Header("自動スポーン (オプション)")]
+    [Tooltip("プレハブを設定 + Auto Spawn Plate Count > 0 で、Awake 時にパス上へ等間隔自動配置する。手動 plates は上書きされる。")]
+    [SerializeField] private GameObject platePrefab;
+
+    [Tooltip("自動スポーンする皿の枚数 (0 = 自動スポーン無効、上の手動 plates を使用)")]
+    [Min(0)]
+    [SerializeField] private int autoSpawnPlateCount = 0;
 
     [Header("回転軸・速度")]
     [Tooltip("回転軸 (このオブジェクトのローカル空間)")]
@@ -88,9 +96,16 @@ public class PinballWaterWheel : MonoBehaviour
         {
             Debug.Log($"[PinballWaterWheel] shape={shape}, plateAlwaysUpright={plateAlwaysUpright}, plates={(plates != null ? plates.Length : 0)}, radius={radius}, stretchLength={stretchLength}, rotationAxis={rotationAxis}, angularSpeed={angularSpeed}", this);
         }
+
+        // 自動スポーン: プレハブが指定されていれば等間隔配置
+        if (platePrefab != null && autoSpawnPlateCount > 0)
+        {
+            AutoSpawnPlates();
+        }
+
         if (plates == null || plates.Length == 0)
         {
-            Debug.LogWarning("[PinballWaterWheel] plates 配列が空です。", this);
+            Debug.LogWarning("[PinballWaterWheel] plates 配列が空です。手動配置するか Plate Prefab + Auto Spawn Plate Count を設定してください。", this);
             return;
         }
         int n = plates.Length;
@@ -172,6 +187,61 @@ public class PinballWaterWheel : MonoBehaviour
             }
         }
 
+    }
+
+    /// <summary>
+    /// platePrefab を autoSpawnPlateCount 個 instantiate し、パス上に等間隔配置する。
+    /// 各皿の初期 rotation も path tangent + outward に合わせて正しく設定する。
+    /// </summary>
+    void AutoSpawnPlates()
+    {
+        plates = new Transform[autoSpawnPlateCount];
+        Vector3 axisN = rotationAxis.sqrMagnitude > 0.0001f ? rotationAxis.normalized : Vector3.right;
+        Quaternion prefabRot = platePrefab.transform.rotation;
+
+        for (int i = 0; i < autoSpawnPlateCount; i++)
+        {
+            float phase = (float)i / autoSpawnPlateCount;
+
+            GameObject go = Instantiate(platePrefab, transform);
+            go.name = $"{platePrefab.name}_{i}";
+            plates[i] = go.transform;
+
+            // 等間隔配置: パス上の phase 位置 (Stadium / Circle 両対応; Circle は L=0 で同式)
+            Vector3 localPos = SampleStadiumPath(phase);
+            plates[i].position = transform.TransformPoint(localPos);
+
+            // 初期回転: 水車式なら path 由来 × プレハブ姿勢、パターノスター式なら wheel × プレハブ姿勢
+            Quaternion initialRot;
+            if (plateAlwaysUpright)
+            {
+                initialRot = transform.rotation * prefabRot;
+            }
+            else
+            {
+                Quaternion pathRot = ComputePathRotationWorld(phase, axisN);
+                initialRot = pathRot * prefabRot;
+            }
+            plates[i].rotation = initialRot;
+        }
+    }
+
+    /// <summary>phase 位置における path 由来の world rotation (LookRotation(tangent, outward))</summary>
+    Quaternion ComputePathRotationWorld(float phase, Vector3 axisN)
+    {
+        Vector3 tangent = ComputeTangent(phase);
+        Vector3 outward = Vector3.Cross(axisN, tangent);
+        if (outward.sqrMagnitude < 0.0001f) outward = Vector3.up;
+        else outward = outward.normalized;
+
+        Vector3 worldTangent = transform.TransformDirection(tangent);
+        Vector3 worldOutward = transform.TransformDirection(outward);
+
+        if (worldTangent.sqrMagnitude > 0.0001f && worldOutward.sqrMagnitude > 0.0001f)
+        {
+            return Quaternion.LookRotation(worldTangent, worldOutward);
+        }
+        return Quaternion.identity;
     }
 
     /// <summary>ローカル座標で渡された点に最も近い path 上の phase (0~1) を返す。</summary>
