@@ -180,6 +180,7 @@ namespace MiniGames.FallBall
 
             // アニメーション完了を待つ
             yield return new WaitForSeconds(refillClip.length);
+            Debug.Log($"FallBallRefill: アニメーション完了を検知しました ({refillClip.length}秒経過)");
 
             // ボールを離す
             ReleaseBall(newBall);
@@ -204,32 +205,57 @@ namespace MiniGames.FallBall
 
         private GameObject SpawnBallInArm()
         {
-            if (ballTemplate == null || ballSpawnParent == null) return null;
+            if (ballTemplate == null)
+            {
+                Debug.LogError("FallBallRefill: ballTemplate が未設定です！");
+                return null;
+            }
+            if (ballSpawnParent == null)
+            {
+                Debug.LogError("FallBallRefill: ballSpawnParent (出現位置) が未設定です！");
+                return null;
+            }
 
-            if (ballTemplate.activeSelf)
+            // テンプレート自体がシーンにある場合、非アクティブであることを確認
+            if (ballTemplate.activeInHierarchy && ballTemplate.scene.name != null)
             {
                 ballTemplate.SetActive(false);
             }
 
-            GameObject newBall = Instantiate(ballTemplate, ballSpawnParent);
+            GameObject newBall = Instantiate(ballTemplate, ballSpawnParent.position, ballSpawnParent.rotation, ballSpawnParent);
+            newBall.name = "RefilledBall_" + Time.frameCount;
             newBall.SetActive(true);
-            newBall.transform.localPosition = Vector3.zero;
             
             Rigidbody rb = newBall.GetComponent<Rigidbody>();
-            if (rb != null) rb.isKinematic = true;
+            if (rb != null)
+            {
+                rb.isKinematic = true;
+                Debug.Log($"FallBallRefill: ボールを生成しました: {newBall.name} (Kinematic)");
+            }
+            else
+            {
+                Debug.LogWarning($"FallBallRefill: 生成した {newBall.name} に Rigidbody がありません！");
+            }
 
             return newBall;
         }
 
         private void ReleaseBall(GameObject ball)
         {
-            if (ball == null) return;
+            if (ball == null)
+            {
+                Debug.LogWarning("FallBallRefill: 解放するボールがnullです");
+                return;
+            }
+
+            Debug.Log($"FallBallRefill: ボール {ball.name} をアームから切り離し物理演算を開始します");
             ball.transform.SetParent(null);
             Rigidbody rb = ball.GetComponent<Rigidbody>();
             if (rb != null)
             {
                 rb.isKinematic = false;
                 rb.linearVelocity = Vector3.zero;
+                rb.angularVelocity = Vector3.zero;
             }
         }
 
