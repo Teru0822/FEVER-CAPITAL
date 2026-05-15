@@ -98,7 +98,7 @@ public class PinballPin : MonoBehaviour
 
         ApplyEmission(type == PinType.Enforce ? enforceEmissionColor : splitEmissionColor);
 
-        // pin_wing を解決し初期スケールを記録
+        // pin_wing を解決
         if (pinWing == null && !string.IsNullOrEmpty(pinWingChildName))
         {
             var w = FindChildRecursive(transform, pinWingChildName);
@@ -106,10 +106,23 @@ public class PinballPin : MonoBehaviour
         }
         if (pinWing != null)
         {
-            _pinWingInitialScale = pinWing.localScale;
-            // XZ 1:1 用の基準サイズは初期 X/Z の平均
-            _pinWingBaseSizeXZ = (Mathf.Abs(_pinWingInitialScale.x) + Mathf.Abs(_pinWingInitialScale.z)) * 0.5f;
-            if (_pinWingBaseSizeXZ < 0.0001f) _pinWingBaseSizeXZ = 1f;
+            // pin_wing の Transform が非単位回転 (Blender 由来等) だと、
+            // localScale の X/Z 軸が斜めに傾いていて、X = Z で拡縮しても見た目が斜めに伸びる。
+            // identity rotation のラッパー GameObject を間に挟んで、ラッパーを拡縮することで
+            // Pin root のローカル XZ (= Y軸自転下でも水平な平面) で確実に均等拡張できる。
+            GameObject wrapperGO = new GameObject(pinWing.name + "_ScaleWrapper");
+            wrapperGO.transform.SetParent(pinWing.parent, false);
+            wrapperGO.transform.localPosition = pinWing.localPosition;
+            wrapperGO.transform.localRotation = Quaternion.identity;
+            wrapperGO.transform.localScale = Vector3.one;
+
+            // pin_wing 自体をラッパー配下に移す (ワールド姿勢維持)
+            pinWing.SetParent(wrapperGO.transform, true);
+
+            // 以降スケールするのはラッパー側
+            pinWing = wrapperGO.transform;
+            _pinWingInitialScale = Vector3.one;
+            _pinWingBaseSizeXZ = 1f;
         }
     }
 
