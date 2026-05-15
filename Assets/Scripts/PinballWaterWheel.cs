@@ -55,6 +55,13 @@ public class PinballWaterWheel : MonoBehaviour
     [Tooltip("Awake 時に皿 Collider へ高摩擦の PhysicsMaterial を付与 (玉が滑り落ちない)")]
     [SerializeField] private bool autoApplyHighFrictionMaterial = true;
 
+    [Header("デバッグ")]
+    [Tooltip("OnDrawGizmosSelected で各皿の +Y (上面) と +Z (前方) を矢印で表示")]
+    [SerializeField] private bool drawPlateAxesGizmo = false;
+
+    [Tooltip("Awake で設定内容を Console に出力する")]
+    [SerializeField] private bool logSettingsOnAwake = false;
+
     // --- 内部状態 ---
     // Circle 用
     private Vector3[] _initialLocalOffsets;
@@ -72,7 +79,15 @@ public class PinballWaterWheel : MonoBehaviour
 
     void Awake()
     {
-        if (plates == null || plates.Length == 0) return;
+        if (logSettingsOnAwake)
+        {
+            Debug.Log($"[PinballWaterWheel] shape={shape}, plateAlwaysUpright={plateAlwaysUpright}, plates={(plates != null ? plates.Length : 0)}, radius={radius}, stretchLength={stretchLength}, rotationAxis={rotationAxis}, angularSpeed={angularSpeed}", this);
+        }
+        if (plates == null || plates.Length == 0)
+        {
+            Debug.LogWarning("[PinballWaterWheel] plates 配列が空です。", this);
+            return;
+        }
         int n = plates.Length;
         _initialLocalOffsets = new Vector3[n];
         _initialLocalRotations = new Quaternion[n];
@@ -351,6 +366,20 @@ public class PinballWaterWheel : MonoBehaviour
                 Vector3 cur = transform.TransformPoint(SampleStadiumPath((float)i / seg));
                 Gizmos.DrawLine(prev, cur);
                 prev = cur;
+            }
+        }
+
+        // 各皿の +Y (緑) / +Z (青) 矢印を描画 (回転が適用されているか目視確認)
+        if (drawPlateAxesGizmo && plates != null)
+        {
+            float arrowLen = 0.15f;
+            foreach (var plate in plates)
+            {
+                if (plate == null) continue;
+                Gizmos.color = Color.green;
+                Gizmos.DrawLine(plate.position, plate.position + plate.up * arrowLen);
+                Gizmos.color = Color.blue;
+                Gizmos.DrawLine(plate.position, plate.position + plate.forward * arrowLen);
             }
         }
     }
