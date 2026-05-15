@@ -81,6 +81,14 @@ public class PinballBallController : MonoBehaviour
     [Tooltip("このボールの世代 (0 = 初期、Manager がスポーン時に上書きする)")]
     public int generation = 0;
 
+    [Header("重力 (このボール固有)")]
+    [Tooltip("このボールに毎 FixedUpdate で掛ける重力ベクトル (m/s²)。Awake 時に Config.EffectiveGravity で初期化されるが、Conveyor 等で個別に上書き可能。")]
+    public Vector3 gravity = new Vector3(0f, -9.81f, 9.81f);
+
+    /// <summary>現在いくつのコンベアに乗っているか (>0 の間は重力適用をスキップしてスイーッと運ばれる)</summary>
+    [HideInInspector] public int onConveyorCount = 0;
+    public bool IsOnConveyor => onConveyorCount > 0;
+
     private bool _isSplitting = false;
 
     private Rigidbody rb;
@@ -104,6 +112,8 @@ public class PinballBallController : MonoBehaviour
         // pinballRoot が設定されている時は Unity 重力を切って手動適用
         // (Unity のグローバル gravity は scaleFactor で変更できないため)
         _useManualGravity = _config != null && _config.pinballRoot != null;
+        // 個別 gravity を Config から初期化 (Spawn 後の上書きがなければ Config 値で動く)
+        if (_config != null) gravity = _config.EffectiveGravity;
 
         rb = GetComponent<Rigidbody>();
         rb.mass = mass;
@@ -153,12 +163,14 @@ public class PinballBallController : MonoBehaviour
     void FixedUpdate()
     {
         _isSplitting = false;
-        if (_useManualGravity && _config != null)
+        // コンベアに乗っている間は重力をスキップ (コンベア側が velocity を支配)
+        if (IsOnConveyor) return;
+
+        if (_useManualGravity)
         {
-            // Config.gravity を scale 倍して手動適用 (Unity 重力は OFF)
-            float s = _config.CurrentScaleFactor;
-            Vector3 grav = _config.EffectiveGravity;
-            rb.AddForce(rb.mass * s * grav, ForceMode.Force);
+            // この玉固有の gravity を scale 倍して手動適用 (Unity 重力は OFF)
+            float s = _config != null ? _config.CurrentScaleFactor : 1f;
+            rb.AddForce(rb.mass * s * gravity, ForceMode.Force);
         }
         else
         {

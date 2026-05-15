@@ -304,6 +304,8 @@ public class PinballBallManager : MonoBehaviour
         Vector3 childScale = parentLocalScale * _splitScaleRatio;
         // 世代が深くなるほどスポーン左右オフセットも縮小 (親スケールに追従)
         float xOffset = _spawnXOffset * Mathf.Pow(_splitScaleRatio, parentGen);
+        // 親の現在 gravity を引き継ぐ (コンベアで上書きされた状態を子も保持)
+        Vector3 inheritedGravity = source != null ? source.gravity : new Vector3(0f, -9.81f, 9.81f);
 
         for (int i = 0; i < count; i++)
         {
@@ -314,7 +316,7 @@ public class PinballBallManager : MonoBehaviour
                 collisionPos.z
             );
             Vector3 vel = new Vector3(_splitSpread * t, 0f, 0f);
-            SpawnPhysicsChild(spawnPos, vel, childScale, nextGen, splitterCol);
+            SpawnPhysicsChild(spawnPos, vel, childScale, nextGen, splitterCol, inheritedGravity);
         }
     }
 
@@ -327,7 +329,7 @@ public class PinballBallManager : MonoBehaviour
     }
 
     /// <summary>テンプレートから RB + Collider + Controller 付きの子ボールを 1 個生成する。NativeList には登録しない。</summary>
-    void SpawnPhysicsChild(Vector3 pos, Vector3 vel, Vector3 localScale, int generation, Collider ignoredSplitter)
+    void SpawnPhysicsChild(Vector3 pos, Vector3 vel, Vector3 localScale, int generation, Collider ignoredSplitter, Vector3 inheritedGravity)
     {
         GameObject child = Instantiate(_ballTemplate, pos, Quaternion.identity);
         child.hideFlags = HideFlags.None;
@@ -335,7 +337,12 @@ public class PinballBallManager : MonoBehaviour
         child.SetActive(true);
 
         var ctrl = child.GetComponent<PinballBallController>();
-        if (ctrl != null) ctrl.generation = generation;
+        if (ctrl != null)
+        {
+            ctrl.generation = generation;
+            // 親の現在 gravity を継承 (Awake で Config から再初期化されるが、ここで上書き)
+            ctrl.gravity = inheritedGravity;
+        }
 
         // 生成元 splitter とは衝突しないよう永続的に Ignore (このボールが destroy されたらペアも消える)
         var childCol = child.GetComponent<Collider>();
@@ -671,9 +678,10 @@ public class PinballBallManager : MonoBehaviour
             );
             Vector3 vel = new Vector3(_splitSpread * t, 0f, 0f);
             // 純物理仕様への切替後はこのパスは到達しない (NativeList が空のため) が、
-            // コンパイル維持のため SpawnPhysicsChild にフォワード
+            // コンパイル維持のため SpawnPhysicsChild にフォワード (gravity は Config 既定を渡す)
             Collider ignored = (hitSplitterIdx >= 0 && hitSplitterIdx < _splitterCount) ? _splitterColliders[hitSplitterIdx] : null;
-            SpawnPhysicsChild(spawnPos, vel, childScale, nextGen, ignored);
+            Vector3 defaultGravity = _config != null ? _config.EffectiveGravity : new Vector3(0f, -9.81f, 9.81f);
+            SpawnPhysicsChild(spawnPos, vel, childScale, nextGen, ignored, defaultGravity);
         }
 
         DestroyAt(index);
