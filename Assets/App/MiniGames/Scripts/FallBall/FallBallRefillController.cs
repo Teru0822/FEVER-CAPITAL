@@ -61,15 +61,21 @@ namespace MiniGames.FallBall
 
         private void Start()
         {
+            Debug.Log($"FallBallRefill Start: refillClip={refillClip != null}, animationTarget={animationTarget != null}, " +
+                      $"rodRenderer={rodRenderer != null}, armRenderer={armRenderer != null}, " +
+                      $"ballTemplate={ballTemplate != null}, ballSpawnParent={ballSpawnParent != null}");
+
             // シェイプキーモード用: インデックスを自動取得
             if (rodRenderer != null)
             {
                 rodBlendShapeIndex = FindBlendShapeIndex(rodRenderer, "キー１");
+                Debug.Log($"FallBallRefill: 昇降棒シェイプキー index={rodBlendShapeIndex}");
                 if (rodBlendShapeIndex < 0) rodBlendShapeIndex = 0;
             }
             if (armRenderer != null)
             {
                 armBlendShapeIndex = FindBlendShapeIndex(armRenderer, "キー１");
+                Debug.Log($"FallBallRefill: アームシェイプキー index={armBlendShapeIndex}");
                 if (armBlendShapeIndex < 0) armBlendShapeIndex = 0;
             }
 
@@ -82,10 +88,14 @@ namespace MiniGames.FallBall
                 {
                     legacyAnimation = target.AddComponent<Animation>();
                 }
-                // クリップを Legacy モードに設定して追加
                 refillClip.legacy = true;
                 legacyAnimation.AddClip(refillClip, refillClip.name);
                 legacyAnimation.playAutomatically = false;
+                Debug.Log($"FallBallRefill: アニメーションクリップ「{refillClip.name}」をセットアップ完了（長さ: {refillClip.length}秒）");
+            }
+            else
+            {
+                Debug.Log("FallBallRefill: アニメーションクリップ未設定。シェイプキーモードを使用します。");
             }
         }
 

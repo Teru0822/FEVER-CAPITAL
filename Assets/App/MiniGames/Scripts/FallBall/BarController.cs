@@ -66,6 +66,12 @@ namespace MiniGames.FallBall
         // ドラッグ開始時のベースとマウス位置とのズレを記憶
         private float dragOffsetZ;
 
+        // ピボット方式用: 棒の初期ワールド状態を保存
+        private Vector3 leftBarInitialWorldPos;
+        private Quaternion leftBarInitialWorldRot;
+        private Vector3 rightBarInitialWorldPos;
+        private Quaternion rightBarInitialWorldRot;
+
         void Start()
         {
             if (Application.isPlaying)
@@ -75,15 +81,16 @@ namespace MiniGames.FallBall
                     Debug.LogError("🚨【重要エラー】Inspectorの『Operation Handle』にハンドルがドラッグ＆ドロップされていません！");
                 }
 
-                // ピボットが設定されている場合、棒をピボットの子オブジェクトにする
-                // これによりピボットを回転させると棒も連動して動く
-                if (leftPivot != null && leftBar != null && leftBar.parent != leftPivot)
+                // ピボット方式用: 棒の初期ワールド状態を保存
+                if (leftBar != null)
                 {
-                    leftBar.SetParent(leftPivot, true); // worldPositionStays=true で位置を保持
+                    leftBarInitialWorldPos = leftBar.position;
+                    leftBarInitialWorldRot = leftBar.rotation;
                 }
-                if (rightPivot != null && rightBar != null && rightBar.parent != rightPivot)
+                if (rightBar != null)
                 {
-                    rightBar.SetParent(rightPivot, true);
+                    rightBarInitialWorldPos = rightBar.position;
+                    rightBarInitialWorldRot = rightBar.rotation;
                 }
 
                 if (parentRigidbody == null) parentRigidbody = GetComponent<Rigidbody>();
@@ -250,11 +257,33 @@ namespace MiniGames.FallBall
             // ハンドルのローカルX, Yは常に中央(0)などに固定し、Z軸方向（前後）の動きだけに制限する
             operationHandle.localPosition = new Vector3(0, operationHandle.localPosition.y, operationHandle.localPosition.z);
 
-            // Y軸を中心にローカル回転させてV字にする
-            // ピボットが設定されていても、回転するのは常に「棒」（ピボットは位置の基準のみ）
             float finalAngle = invertBarRotation ? -currentAngle : currentAngle;
-            leftBar.localRotation = Quaternion.Euler(0, -finalAngle, 0);
-            rightBar.localRotation = Quaternion.Euler(0, finalAngle, 0);
+
+            if (leftPivot != null || rightPivot != null)
+            {
+                // ピボット方式: ピボット位置を中心に棒を回転
+                // 初期ワールド座標を基準に、ピボット位置の周りを回転させる
+                if (leftPivot != null && leftBar != null)
+                {
+                    Quaternion rot = Quaternion.AngleAxis(-finalAngle, Vector3.up);
+                    Vector3 offset = leftBarInitialWorldPos - leftPivot.position;
+                    leftBar.position = leftPivot.position + rot * offset;
+                    leftBar.rotation = rot * leftBarInitialWorldRot;
+                }
+                if (rightPivot != null && rightBar != null)
+                {
+                    Quaternion rot = Quaternion.AngleAxis(finalAngle, Vector3.up);
+                    Vector3 offset = rightBarInitialWorldPos - rightPivot.position;
+                    rightBar.position = rightPivot.position + rot * offset;
+                    rightBar.rotation = rot * rightBarInitialWorldRot;
+                }
+            }
+            else
+            {
+                // 従来方式: 棒を直接回転
+                leftBar.localRotation = Quaternion.Euler(0, -finalAngle, 0);
+                rightBar.localRotation = Quaternion.Euler(0, finalAngle, 0);
+            }
         }
 
         // ピボット（支点）の位置をエディタ上で可視化する
