@@ -21,6 +21,8 @@ namespace MiniGames.FallBall
         [Header("Settings (Angle/Opening)")]
         [SerializeField] private float handleMinZ = 0.0f;
         [SerializeField] private float handleMaxZ = 5.0f;
+        [Tooltip("ハンドルの判定範囲（横長の直方体）")]
+        [SerializeField] private Vector3 handleInteractionBoxSize = new Vector3(2.0f, 1.0f, 1.0f);
         [SerializeField] private float angleAtMinZ = 30.0f;
         [SerializeField] private float angleAtMaxZ = 0.0f;
         [SerializeField] private bool invertBarRotation = false;
@@ -92,9 +94,9 @@ namespace MiniGames.FallBall
             if (cam == null) return;
 
             Ray ray = cam.ScreenPointToRay(Mouse.current.position.ReadValue());
-            // 全てのレイヤーを対象にするため、レイヤーマスクに -1 を指定
+            
+            // 1. 直接クリック判定 (コライダーがある場合)
             RaycastHit[] hits = Physics.RaycastAll(ray, 100f, -1);
-
             foreach (var hit in hits)
             {
                 if (hit.transform == operationHandle || hit.transform.IsChildOf(operationHandle))
@@ -105,21 +107,20 @@ namespace MiniGames.FallBall
                 }
             }
 
-            // 2. コライダーがない場合の距離判定（ハンドルの近くならOKとする）
-            Plane plane = new Plane(transform.up, transform.position);
+            // 2. 距離判定 (Box判定)
+            Plane plane = new Plane(transform.up, operationHandle.position);
             if (plane.Raycast(ray, out float enter))
             {
                 Vector3 worldPoint = ray.GetPoint(enter);
-                float dist = Vector3.Distance(worldPoint, operationHandle.position);
-                if (dist < 2.5f) // 距離判定を大幅に緩和
+                // ハンドルのローカル空間での相対位置を計算
+                Vector3 localOffset = operationHandle.InverseTransformPoint(worldPoint);
+                
+                if (Mathf.Abs(localOffset.x) < handleInteractionBoxSize.x * 0.5f &&
+                    Mathf.Abs(localOffset.y) < handleInteractionBoxSize.y * 0.5f &&
+                    Mathf.Abs(localOffset.z) < handleInteractionBoxSize.z * 0.5f)
                 {
-                    Debug.Log($"BarController: 距離判定({dist:F2}m)でハンドルを掴みました");
+                    Debug.Log("BarController: Box判定内でハンドルを掴みました");
                     StartDrag(ray);
-                }
-                else
-                {
-                    // それでも届かない場合のみ警告
-                    Debug.Log($"BarController: クリック位置がまだ遠いです (距離: {dist:F2}m / 2.5mまで許可)");
                 }
             }
         }
@@ -127,12 +128,13 @@ namespace MiniGames.FallBall
         private void StartDrag(Ray ray)
         {
             isDragging = true;
-            Camera cam = targetCamera != null ? targetCamera : Camera.main;
-            Plane plane = new Plane(transform.up, transform.position);
+            Plane plane = new Plane(transform.up, operationHandle.position);
             if (plane.Raycast(ray, out float enter))
             {
                 Vector3 worldPoint = ray.GetPoint(enter);
                 Vector3 localPoint = transform.InverseTransformPoint(worldPoint);
+                
+                // ドラッグ開始時のマウス位置とハンドルのlocalPositionの差分を記録
                 dragOffsetX = operationHandle.localPosition.x - localPoint.x;
                 dragOffsetZ = operationHandle.localPosition.z - localPoint.z;
             }
@@ -144,26 +146,25 @@ namespace MiniGames.FallBall
             if (cam == null) return;
 
             Ray ray = cam.ScreenPointToRay(Mouse.current.position.ReadValue());
-            Plane plane = new Plane(transform.up, transform.position);
+            Plane plane = new Plane(transform.up, operationHandle.position);
 
             if (plane.Raycast(ray, out float enter))
             {
                 Vector3 worldPoint = ray.GetPoint(enter);
                 Vector3 localPoint = transform.InverseTransformPoint(worldPoint);
 
-                // Z軸（前後：開閉）
-                float targetZ = localPoint.z + dragOffsetZ;
-                float minZ = Mathf.Min(handleMinZ, handleMaxZ);
-                float maxZ = Mathf.Max(handleMinZ, handleMaxZ);
-                
-                // X軸（左右：傾き）
+                // ハンドルの移動制限範囲を適用
                 float targetX = localPoint.x + dragOffsetX;
+                float targetZ = localPoint.z + dragOffsetZ;
+
                 float minX = Mathf.Min(handleMinX, handleMaxX);
                 float maxX = Mathf.Max(handleMinX, handleMaxX);
+                float minZ = Mathf.Min(handleMinZ, handleMaxZ);
+                float maxZ = Mathf.Max(handleMinZ, handleMaxZ);
 
                 Vector3 pos = operationHandle.localPosition;
-                pos.z = Mathf.Clamp(targetZ, minZ, maxZ);
                 pos.x = Mathf.Clamp(targetX, minX, maxX);
+                pos.z = Mathf.Clamp(targetZ, minZ, maxZ);
                 operationHandle.localPosition = pos;
             }
         }
@@ -191,7 +192,7 @@ namespace MiniGames.FallBall
         {
             if (bar == null) return;
 
-            // 状態をリセット（常に初期状態から計算をやり直すことで誤差を防ぐ）
+            // 状態をリセット
             bar.localPosition = initialPos;
             bar.localRotation = initialRot;
 
@@ -212,21 +213,26 @@ namespace MiniGames.FallBall
 
         private void OnDrawGizmos()
         {
-            // 回転軸を青い点で表示（これを動かしてください！）
+            // 回転軸を青い点で表示
             Gizmos.color = Color.blue;
             if (leftPivot != null) Gizmos.DrawSphere(leftPivot.position, 0.05f);
             if (rightPivot != null) Gizmos.DrawSphere(rightPivot.position, 0.05f);
+            if (commonSteeringPivot != null) Gizmos.DrawSphere(commonSteeringPivot.position, 0.07f);
             
             // 棒の付け根を赤い点で表示
             Gizmos.color = Color.red;
             if (leftBar != null) Gizmos.DrawSphere(leftBar.position, 0.03f);
             if (rightBar != null) Gizmos.DrawSphere(rightBar.position, 0.03f);
 
-            // ハンドルの当たり判定（クリックできる場所）を緑色で表示
+            // ハンドルの当たり判定を緑色の直方体で表示
             if (operationHandle != null)
             {
                 Gizmos.color = Color.green;
-                Gizmos.DrawWireCube(operationHandle.position, Vector3.one * 0.2f);
+                Gizmos.matrix = operationHandle.localToWorldMatrix;
+                Gizmos.DrawWireCube(Vector3.zero, handleInteractionBoxSize);
+                Gizmos.matrix = Matrix4x4.identity;
+                
+                Gizmos.color = Color.green;
                 Gizmos.DrawLine(operationHandle.position, operationHandle.position + transform.up * 0.5f);
             }
         }
