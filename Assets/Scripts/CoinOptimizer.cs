@@ -19,8 +19,8 @@ public class CoinOptimizer : MonoBehaviour
 
     private IEnumerator CheckAndFreezeRoutine(float delay)
     {
-        // 最初のランダム待機
-        yield return new WaitForSeconds(delay);
+        // 最初のランダム待機（スポーン直後などに空中で凍結するのを防ぐため、最低でも1秒は確実に落下させる）
+        yield return new WaitForSeconds(delay + 1.0f);
         
         // 毎回「new」するとゴミ（GC）が出るので、1秒待機する命令を使い回す（最適化の基本）
         WaitForSeconds wait = new WaitForSeconds(checkInterval);
@@ -44,12 +44,26 @@ public class CoinOptimizer : MonoBehaviour
     }
 
     // アームが近づいた時に外部から叩き起こすための処理
-    public void WakeUp()
+    public void WakeUp(bool isChain = false)
     {
         if (rb != null && rb.isKinematic)
         {
             rb.isKinematic = false;
             StartCoroutine(CheckAndFreezeRoutine(1.0f));
+
+            // 初回の呼び出し時のみ、周囲のコインも連鎖的に起こす（下のコインが抜けて上のコインが空中に浮いたままになるのを防ぐ）
+            if (!isChain)
+            {
+                Collider[] hits = Physics.OverlapSphere(transform.position, coinThickness * 4f);
+                foreach (var hit in hits)
+                {
+                    CoinOptimizer other = hit.GetComponent<CoinOptimizer>();
+                    if (other != null && other != this)
+                    {
+                        other.WakeUp(true); // 連鎖フラグを立てて呼ぶ（無限ループ防止）
+                    }
+                }
+            }
         }
     }
 }
