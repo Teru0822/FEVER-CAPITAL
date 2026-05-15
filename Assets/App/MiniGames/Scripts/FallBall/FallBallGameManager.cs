@@ -21,6 +21,8 @@ namespace MiniGames.FallBall
         [SerializeField] private BarController barController;
         [Tooltip("落下させる鉄球のGameObject（プレハブまたはシーン内の元オブジェクト）")]
         [SerializeField] private GameObject ballObject;
+        [Tooltip("ボール補充アニメーションのコントローラー")]
+        [SerializeField] private FallBallRefillController refillController;
 
         [Header("Debug & Test")]
         [Tooltip("テスト用に、ボールが落ちてもゲームを終了せず操作を続けられるようにする")]
@@ -36,34 +38,81 @@ namespace MiniGames.FallBall
 
         private void Start()
         {
+            Debug.Log($"FallBallGameManager Start: ballObject={ballObject != null}, refillController={refillController != null}");
+            
             if (ballObject != null)
             {
-                // 元のオブジェクトを非表示にしてテンプレート化（削除されて参照が消えるのを防ぐ）
-                ballTemplate = ballObject;
-                ballTemplate.SetActive(false);
+                // シーン内のオブジェクトが直接指定されている場合、Destroyされないようにテンプレートとして保持
+                // (プレハブでない場合は scene.name が入る)
+                if (ballObject.gameObject.scene.name != null)
+                {
+                    ballTemplate = ballObject;
+                    initialBallPosition = ballObject.transform.position;
+                    initialBallRotation = ballObject.transform.rotation;
+                    
+                    // シーン内の実体そのものが消えないよう、補充時はこれのクローンを作る
+                    // 最初の1個目を出す前に非表示にしておく
+                    ballObject.SetActive(false);
+                }
+                else
+                {
+                    ballTemplate = ballObject;
+                    initialBallPosition = transform.position;
+                    initialBallRotation = Quaternion.identity;
+                }
                 
-                initialBallPosition = ballTemplate.transform.position;
-                initialBallRotation = ballTemplate.transform.rotation;
-                
-                // 最初に1つだけ表示用として出す
-                SpawnNewBall();
+                if (refillController != null)
+                {
+                    StartCoroutine(InitialRefill());
+                }
+                else
+                {
+                    SpawnNewBall();
+                }
             }
+            else
+            {
+                Debug.LogWarning("FallBallGameManager: ballObject が設定されていません！");
+            }
+        }
+
+        private System.Collections.IEnumerator InitialRefill()
+        {
+            // 起動直後だとアニメーションが正しく開始されない場合があるため、少し待つ
+            yield return new WaitForSeconds(0.5f);
+            Debug.Log("FallBallGameManager: 起動時の自動補充（アニメーション付き）を実行します。");
+            SpawnNewBall();
         }
 
         private void Update()
         {
             if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
             {
+                Debug.Log($"FallBallGameManager: Spaceキー検知! refillController={refillController != null}, IsRefilling={refillController?.IsRefilling}");
+                
+                // 補充アニメーション中は追加スポーンを無効化
+                if (refillController != null && refillController.IsRefilling) return;
+                
                 SpawnNewBall();
             }
         }
 
         private void SpawnNewBall()
         {
+            // RefillController が設定されている場合はアニメーション付きで補充
+            // (RefillController は自身の ballTemplate を持つので GameManager の ballTemplate は不要)
+            if (refillController != null)
+            {
+                StartCoroutine(refillController.PlayRefillSequence());
+                Debug.Log("FallBall: 補充アニメーションを開始しました");
+                return;
+            }
+            
             if (ballTemplate == null) return;
-
+            
+            // RefillController が未設定の場合は従来のシンプルなスポーン
             GameObject newBall = Instantiate(ballTemplate, initialBallPosition, initialBallRotation);
-            newBall.SetActive(true); // 複製したものを表示する
+            newBall.SetActive(true);
             
             Rigidbody rb = newBall.GetComponent<Rigidbody>();
             if (rb != null)
@@ -110,6 +159,7 @@ namespace MiniGames.FallBall
         /// </summary>
         public void OnGoalReached()
         {
+            Debug.Log("FallBall: ゴールに到達！成功です！");
             if (isFinished && !allowContinuousPlay) return;
             isFinished = true;
             
@@ -124,20 +174,35 @@ namespace MiniGames.FallBall
 
         /// <summary>
         /// ボールが場外に落ちた（失敗）ときに呼ばれる。
-        /// 床などに配置したTriggerコライダーから呼び出す想定。
         /// </summary>
         public void OnOutZoneReached()
         {
-            if (isFinished && !allowContinuousPlay) return;
-            isFinished = true;
+            // 自動再生成を有効にするため、ここでは単にログを出して再生成ルーチンを呼ぶ
+            Debug.Log("FallBall: ボールが場外に落ちました");
+            OnBallExit();
+        }
+
+        /// <summary>
+        /// ボールがシーンから消えた（アウトまたはゴール）際に、次のボールを出すための通知。
+        /// </summary>
+        public void OnBallExit()
+        {
+            Debug.Log($"FallBallGameManager: OnBallExit呼ばれました. isFinished={isFinished}, allowContinuousPlay={allowContinuousPlay}");
             
-            if (!allowContinuousPlay && barController != null)
+            if (isFinished && !allowContinuousPlay) 
             {
-                barController.SetActive(false);
+                Debug.Log("FallBallGameManager: ゲーム終了済みのため再補充をスキップします。");
+                return;
             }
             
-            Debug.Log("FallBall: Dropped outside! Failed.");
-            OnGameCompleted?.Invoke(false, 0f);
+            Debug.Log("FallBall: ボール退出検知。1秒後に再出現させます。");
+            StartCoroutine(WaitAndSpawnBall());
+        }
+
+        private System.Collections.IEnumerator WaitAndSpawnBall()
+        {
+            yield return new WaitForSeconds(1.0f);
+            SpawnNewBall();
         }
     }
 }

@@ -3,249 +3,198 @@ using UnityEngine.InputSystem;
 
 namespace MiniGames.FallBall
 {
-    /// <summary>
-    /// 鉄球落としの棒（レール）と半透明操作オブジェクトの制御クラス。
-    /// - マウスで操作ハンドルをドラッグする
-    /// - ハンドルを奥（支点）へ押すとV字に開き、手前へ引くと閉じる
-    /// - ハンドルを左右へ動かすと、全体（棒とハンドル）が左右へ移動する
-    /// </summary>
-    [ExecuteAlways]
     public class BarController : MonoBehaviour
     {
         [Header("References")]
-        [Tooltip("左側の棒のTransform（原点が上部の支点にあること）")]
         [SerializeField] private Transform leftBar;
-        [Tooltip("右側の棒のTransform（原点が上部の支点にあること）")]
         [SerializeField] private Transform rightBar;
-        [Tooltip("操作用の半透明のオブジェクト（ハンドルのTransform）")]
+        [Tooltip("回転の軸となる位置（青い点）。ここを中心に回転します")]
+        [SerializeField] private Transform leftPivot;
+        [Tooltip("回転の軸となる位置（青い点）。ここを中心に回転します")]
+        [SerializeField] private Transform rightPivot;
         [SerializeField] private Transform operationHandle;
+        [Tooltip("クリック判定に使用するカメラ。未指定ならCamera.mainを使用")]
+        [SerializeField] private Camera targetCamera;
 
-        [Header("Physics Settings")]
-        [Tooltip("棒全体の移動を物理的に行うためのRigidbody（IsKinematic推奨）")]
-        [SerializeField] private Rigidbody parentRigidbody;
-
-        [Header("Settings (Rotation Aim)")]
-        [Tooltip("マウス左右移動による回転（エイム）の感度")]
-        [SerializeField] private float yawSensitivity = 0.2f;
-        [Tooltip("左方向への最大回転角度（ローカル）")]
-        [SerializeField] private float minYaw = -45f;
-        [Tooltip("右方向への最大回転角度（ローカル）")]
-        [SerializeField] private float maxYaw = 45f;
-        [Tooltip("エイムの左右の動きが逆だと感じる場合はチェックを入れてください")]
-        [SerializeField] private bool invertAimDirection = false;
-
-        [Header("Settings (Opening Angle & Z Depth)")]
-        [Tooltip("支点（奥）に一番近いときのハンドルのローカルZ座標")]
+        [Header("Settings (Angle)")]
         [SerializeField] private float handleMinZ = 0.0f;
-        [Tooltip("一番手前にあるときのハンドルのローカルZ座標")]
         [SerializeField] private float handleMaxZ = 5.0f;
-        [Tooltip("ハンドルが一番奥にある時（支点に近い時）のV字開き角度")]
-        [SerializeField] private float maxAngle = 30.0f;
-        [Tooltip("ハンドルが一番手前にある時のV字開き角度（平行なら0）")]
-        [SerializeField] private float minAngle = 0.0f;
-        [Tooltip("棒の開く向きが逆（交差してしまう等）の場合はチェックを入れてください")]
+        [SerializeField] private float angleAtMinZ = 30.0f;
+        [SerializeField] private float angleAtMaxZ = 0.0f;
         [SerializeField] private bool invertBarRotation = false;
-        
-        [Header("Settings (Base Gap)")]
-        [Tooltip("支点での固定された隙間の広さ（ボールが転がる幅）")]
-        [SerializeField] private float baseGap = 1.0f;
 
-        private float currentYaw = 0f;
-        private Quaternion initialRotation;
+        [Header("Debug")]
+        [SerializeField] private bool showDebugLogs = true;
+
         private bool isGameActive = true; 
         private bool isDragging = false;
-        
-        // ドラッグ開始時のベースとマウス位置とのズレを記憶
         private float dragOffsetZ;
+
+        private Vector3 leftBarInitialLocalPos;
+        private Quaternion leftBarInitialLocalRot;
+        private Vector3 rightBarInitialLocalPos;
+        private Quaternion rightBarInitialLocalRot;
 
         void Start()
         {
-            if (Application.isPlaying)
+            if (leftBar != null)
             {
-                if (operationHandle == null)
-                {
-                    Debug.LogError("🚨【重要エラー】Inspectorの『Operation Handle』にハンドルがドラッグ＆ドロップされていません！");
-                }
-
-                if (parentRigidbody == null) parentRigidbody = GetComponent<Rigidbody>();
-                
-                if (parentRigidbody != null && !parentRigidbody.isKinematic)
-                {
-                    Debug.LogWarning("BarController: parentRigidbody は IsKinematic=true に設定することを推奨します。");
-                }
-
-                initialRotation = transform.localRotation;
-                currentYaw = 0f;
+                leftBarInitialLocalPos = leftBar.localPosition;
+                leftBarInitialLocalRot = leftBar.localRotation;
             }
-            UpdateBarsState();
+            if (rightBar != null)
+            {
+                rightBarInitialLocalPos = rightBar.localPosition;
+                rightBarInitialLocalRot = rightBar.localRotation;
+            }
         }
 
         public void SetActive(bool active)
         {
             isGameActive = active;
-            if (!active) isDragging = false;
         }
 
         void Update()
         {
-            if (!isGameActive) return;
+            if (Mouse.current == null) return;
 
-            if (Application.isPlaying)
-            {
-                HandleMouseInput();
-            }
-            UpdateBarsState();
-        }
-
-        private void HandleMouseInput()
-        {
-            if (Mouse.current == null || Camera.main == null) return;
-
-            // マウスクリック開始
             if (Mouse.current.leftButton.wasPressedThisFrame)
             {
-                Ray ray = Camera.main.ScreenPointToRay(Mouse.current.position.ReadValue());
-                
-                // RaycastAllを使用して、他の透明なコライダーに遮られても貫通して判定する
-                RaycastHit[] hits = Physics.RaycastAll(ray);
-                bool hitHandle = false;
-                
-                // 【デバッグ用】当たったすべてのオブジェクトの名前を記録
-                string allHits = "";
-
-                foreach (var hit in hits)
-                {
-                    // hit.transformではなく、確実にColliderが付いているオブジェクトの名前を取得
-                    allHits += $"[{hit.collider.gameObject.name}] ";
-
-                    // hit.collider.transform と比較する（親にRigidbodyがある場合のUnityの仕様対策）
-                    if (operationHandle != null && (hit.collider.transform == operationHandle || hit.collider.transform.IsChildOf(operationHandle)))
-                    {
-                        hitHandle = true;
-                        Debug.Log("✅ BarController: ハンドルのクリックを検知しました！");
-                        break; 
-                    }
-                }
-
-                if (!hitHandle && hits.Length > 0)
-                {
-                    Debug.Log($"❌ BarController: クリックした線上にハンドルがありません。\n通過したオブジェクト: {allHits}");
-                }
-                else if (!hitHandle)
-                {
-                    Debug.Log("BarController: クリックしましたが何も当たりませんでした。\n※MainCameraタグが設定されているか確認してください。");
-                }
-
-                if (hitHandle)
-                {
-                    isDragging = true;
-
-                    Plane dragPlane = new Plane(transform.up, transform.position);
-                    if (dragPlane.Raycast(ray, out float enter))
-                    {
-                        Vector3 worldHitPoint = ray.GetPoint(enter);
-                        
-                        // クリックした位置と現在のベース位置(X)の差分を記録
-                        // ※ドラッグ開始時のワールドヒットポイントと実際のベースX座標の差を計算するロジックに変更
-                        dragOffsetZ = operationHandle.localPosition.z - transform.InverseTransformPoint(worldHitPoint).z;
-                    }
-                }
+                CheckClick();
             }
-
-            // マウス離上
             if (Mouse.current.leftButton.wasReleasedThisFrame)
             {
                 isDragging = false;
             }
-            // ドラッグ中の処理（InputSystemの値はUpdateで取得する）
-            if (isDragging)
+
+            if (isDragging && isGameActive)
             {
-                // --- 左右操作（ベース全体の回転：エイム） ---
-                Vector2 mouseDelta = Mouse.current.delta.ReadValue();
-                float yawChange = mouseDelta.x * yawSensitivity;
-                if (invertAimDirection) yawChange = -yawChange;
-                
-                currentYaw += yawChange;
-                currentYaw = Mathf.Clamp(currentYaw, minYaw, maxYaw);
-
-                // もしRigidbodyがない場合は即座に回転（ある場合はFixedUpdateでMoveRotation）
-                if (parentRigidbody == null)
-                {
-                    transform.localRotation = initialRotation * Quaternion.Euler(0, currentYaw, 0);
-                }
-
-                // --- 縦移動（ハンドルのZ軸移動）の計算 ---
-                Ray ray = Camera.main.ScreenPointToRay(Mouse.current.position.ReadValue());
-                Plane dragPlane = new Plane(transform.up, transform.position);
-
-                if (dragPlane.Raycast(ray, out float enter))
-                {
-                    Vector3 worldHitPoint = ray.GetPoint(enter);
-                    Vector3 localHitPoint = transform.InverseTransformPoint(worldHitPoint);
-                    
-                    float targetZ = localHitPoint.z + dragOffsetZ;
-                    
-                    // HandleMinZとHandleMaxZの数値の大小関係が逆（Zがマイナス方向など）の場合に備え、正しい最小値・最大値を判定する
-                    float actualMinZ = Mathf.Min(handleMinZ, handleMaxZ);
-                    float actualMaxZ = Mathf.Max(handleMinZ, handleMaxZ);
-                    
-                    // 単純にMinとMaxの間で制限する
-                    float clampedZ = Mathf.Clamp(targetZ, actualMinZ, actualMaxZ);
-                    
-                    Vector3 handlePos = operationHandle.localPosition;
-                    handlePos.z = clampedZ;
-                    operationHandle.localPosition = handlePos;
-
-                    // 親にRigidbodyがある状態で子オブジェクトを動かすと当たり判定が取り残される問題の修正
-                    Physics.SyncTransforms();
-                }
+                UpdateDrag();
             }
+
+            UpdateBars();
         }
 
-        private void FixedUpdate()
+        private void CheckClick()
         {
-            // 物理演算（回転の適用）のみをFixedUpdateで行う
-            if (Application.isPlaying && parentRigidbody != null && parentRigidbody.isKinematic)
+            if (operationHandle == null) return;
+
+            Camera cam = targetCamera != null ? targetCamera : Camera.main;
+            if (cam == null) return;
+
+            Ray ray = cam.ScreenPointToRay(Mouse.current.position.ReadValue());
+            // 全てのレイヤーを対象にするため、レイヤーマスクに -1 を指定
+            RaycastHit[] hits = Physics.RaycastAll(ray, 100f, -1);
+
+            foreach (var hit in hits)
             {
-                Quaternion newRot = initialRotation * Quaternion.Euler(0, currentYaw, 0);
-                parentRigidbody.MoveRotation(newRot);
+                if (hit.transform == operationHandle || hit.transform.IsChildOf(operationHandle))
+                {
+                    Debug.Log($"BarController: ハンドル「{hit.transform.name}」を直接クリックしました");
+                    StartDrag(ray);
+                    return;
+                }
+            }
+
+            // 2. コライダーがない場合の距離判定（ハンドルの近くならOKとする）
+            Plane plane = new Plane(transform.up, transform.position);
+            if (plane.Raycast(ray, out float enter))
+            {
+                Vector3 worldPoint = ray.GetPoint(enter);
+                float dist = Vector3.Distance(worldPoint, operationHandle.position);
+                if (dist < 2.5f) // 距離判定を大幅に緩和
+                {
+                    Debug.Log($"BarController: 距離判定({dist:F2}m)でハンドルを掴みました");
+                    StartDrag(ray);
+                }
+                else
+                {
+                    // それでも届かない場合のみ警告
+                    Debug.Log($"BarController: クリック位置がまだ遠いです (距離: {dist:F2}m / 2.5mまで許可)");
+                }
             }
         }
 
-        private void UpdateBarsState()
+        private void StartDrag(Ray ray)
+        {
+            isDragging = true;
+            Camera cam = targetCamera != null ? targetCamera : Camera.main;
+            Plane plane = new Plane(transform.up, transform.position);
+            if (plane.Raycast(ray, out float enter))
+            {
+                Vector3 worldPoint = ray.GetPoint(enter);
+                dragOffsetZ = operationHandle.localPosition.z - transform.InverseTransformPoint(worldPoint).z;
+            }
+        }
+
+        private void UpdateDrag()
+        {
+            Camera cam = targetCamera != null ? targetCamera : Camera.main;
+            if (cam == null) return;
+
+            Ray ray = cam.ScreenPointToRay(Mouse.current.position.ReadValue());
+            Plane plane = new Plane(transform.up, transform.position);
+
+            if (plane.Raycast(ray, out float enter))
+            {
+                Vector3 worldPoint = ray.GetPoint(enter);
+                float targetZ = transform.InverseTransformPoint(worldPoint).z + dragOffsetZ;
+                float minZ = Mathf.Min(handleMinZ, handleMaxZ);
+                float maxZ = Mathf.Max(handleMinZ, handleMaxZ);
+                
+                Vector3 pos = operationHandle.localPosition;
+                pos.z = Mathf.Clamp(targetZ, minZ, maxZ);
+                operationHandle.localPosition = pos;
+            }
+        }
+
+        private void UpdateBars()
         {
             if (leftBar == null || rightBar == null || operationHandle == null) return;
 
-            // 支点からのハンドルの距離割合を計算 (0: 支点に一番近い, 1: 一番遠い)
             float t = Mathf.InverseLerp(handleMinZ, handleMaxZ, operationHandle.localPosition.z);
-            
-            // 割合に応じて角度を決定（t=0 なら maxAngle[開く], t=1 なら minAngle[閉じる]）
-            float currentAngle = Mathf.Lerp(maxAngle, minAngle, t);
+            float angle = Mathf.Lerp(angleAtMinZ, angleAtMaxZ, t);
+            if (invertBarRotation) angle = -angle;
 
-            float halfBaseGap = baseGap / 2f;
-
-            // ハンドルのローカルX, Yは常に中央(0)などに固定し、Z軸方向（前後）の動きだけに制限する
-            operationHandle.localPosition = new Vector3(0, operationHandle.localPosition.y, operationHandle.localPosition.z);
-
-            // Y軸を中心にローカル回転させてV字にする（奥が支点前提）
-            float finalAngle = invertBarRotation ? -currentAngle : currentAngle;
-            leftBar.localRotation = Quaternion.Euler(0, -finalAngle, 0);
-            rightBar.localRotation = Quaternion.Euler(0, finalAngle, 0);
+            RotateBar(leftBar, leftPivot, leftBarInitialLocalPos, leftBarInitialLocalRot, -angle);
+            RotateBar(rightBar, rightPivot, rightBarInitialLocalPos, rightBarInitialLocalRot, angle);
         }
 
-        // ピボット（支点）の位置をエディタ上で可視化する
+        private void RotateBar(Transform bar, Transform pivot, Vector3 initialPos, Quaternion initialRot, float angle)
+        {
+            if (bar == null) return;
+
+            // 状態をリセット
+            bar.localPosition = initialPos;
+            bar.localRotation = initialRot;
+
+            if (pivot != null)
+            {
+                // pivotのローカル空間での回転軸（上方向）を使って回転
+                // RotateAroundはワールド座標系で動くため、軸もワールドに変換
+                Vector3 worldAxis = transform.up; 
+                bar.RotateAround(pivot.position, worldAxis, angle);
+            }
+        }
+
         private void OnDrawGizmos()
         {
+            // 回転軸を青い点で表示（これを動かしてください！）
+            Gizmos.color = Color.blue;
+            if (leftPivot != null) Gizmos.DrawSphere(leftPivot.position, 0.05f);
+            if (rightPivot != null) Gizmos.DrawSphere(rightPivot.position, 0.05f);
+            
+            // 棒の付け根を赤い点で表示
             Gizmos.color = Color.red;
-            if (leftBar != null)
+            if (leftBar != null) Gizmos.DrawSphere(leftBar.position, 0.03f);
+            if (rightBar != null) Gizmos.DrawSphere(rightBar.position, 0.03f);
+
+            // ハンドルの当たり判定（クリックできる場所）を緑色で表示
+            if (operationHandle != null)
             {
-                Gizmos.DrawSphere(leftBar.position, 0.1f);
-                Gizmos.DrawRay(leftBar.position, leftBar.forward * 2f);
-            }
-            if (rightBar != null)
-            {
-                Gizmos.DrawSphere(rightBar.position, 0.1f);
-                Gizmos.DrawRay(rightBar.position, rightBar.forward * 2f);
+                Gizmos.color = Color.green;
+                Gizmos.DrawWireCube(operationHandle.position, Vector3.one * 0.2f);
+                Gizmos.DrawLine(operationHandle.position, operationHandle.position + transform.up * 0.5f);
             }
         }
     }
