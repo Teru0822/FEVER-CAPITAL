@@ -63,6 +63,27 @@ public class PinballWaterWheel : MonoBehaviour
     [Tooltip("Awake 時に皿 Collider へ高摩擦の PhysicsMaterial を付与 (玉が滑り落ちない)")]
     [SerializeField] private bool autoApplyHighFrictionMaterial = true;
 
+    [Header("カタカタ揺れ + SFX")]
+    [Tooltip("Y軸まわりの微振動の最大角度 (deg)。0 で無効")]
+    [SerializeField, Min(0f)] private float rattleAmplitudeDegrees = 1.5f;
+
+    [Tooltip("カタカタの細かさ (Hz 相当)。大きいほど細かい震え")]
+    [SerializeField, Min(0.1f)] private float rattleFrequency = 10f;
+
+    [Tooltip("カタカタ音 AudioClip。null なら無音")]
+    [SerializeField] private AudioClip rattleSfxClip;
+
+    [Tooltip("カタカタ音を鳴らす間隔 (秒)。短いほど忙しいリズム")]
+    [SerializeField, Min(0.02f)] private float rattleSfxInterval = 0.18f;
+
+    [Range(0f, 1f)]
+    [Tooltip("カタカタ音の音量")]
+    [SerializeField] private float rattleSfxVolume = 0.3f;
+
+    [Range(0f, 0.5f)]
+    [Tooltip("カタカタ音のピッチ揺らぎ (±幅)")]
+    [SerializeField] private float rattleSfxPitchVariance = 0.2f;
+
     [Header("デバッグ")]
     [Tooltip("OnDrawGizmosSelected で各皿の +Y (上面) と +Z (前方) を矢印で表示")]
     [SerializeField] private bool drawPlateAxesGizmo = false;
@@ -90,11 +111,24 @@ public class PinballWaterWheel : MonoBehaviour
     private Quaternion[] _initialLocalRotations;
     private Rigidbody[] _plateRigidbodies;
 
+    // カタカタ揺れ + SFX
+    private float _currentWobbleAngle = 0f;
+    private float _rattleSfxTimer = 0f;
+    private AudioSource _rattleAudioSource;
+
     void Awake()
     {
         if (logSettingsOnAwake)
         {
             Debug.Log($"[PinballWaterWheel] shape={shape}, plateAlwaysUpright={plateAlwaysUpright}, plates={(plates != null ? plates.Length : 0)}, radius={radius}, stretchLength={stretchLength}, rotationAxis={rotationAxis}, angularSpeed={angularSpeed}", this);
+        }
+
+        // カタカタ用 AudioSource (このオブジェクト自身に追加)
+        if (rattleSfxClip != null)
+        {
+            _rattleAudioSource = gameObject.AddComponent<AudioSource>();
+            _rattleAudioSource.playOnAwake = false;
+            _rattleAudioSource.spatialBlend = 0f; // 2D 再生
         }
 
         // 自動スポーン: プレハブが指定されていれば等間隔配置
@@ -276,6 +310,32 @@ public class PinballWaterWheel : MonoBehaviour
         else
         {
             FixedUpdateStadium();
+        }
+    }
+
+    void Update()
+    {
+        // カタカタ揺れ: Y軸まわりに小さなランダム振動を追加 (主回転とは別レイヤ)
+        if (rattleAmplitudeDegrees > 0f)
+        {
+            float t = Time.time * rattleFrequency;
+            float targetWobble = (Mathf.PerlinNoise(t, 7.123f) - 0.5f) * 2f * rattleAmplitudeDegrees;
+            float deltaWobble = targetWobble - _currentWobbleAngle;
+            transform.Rotate(Vector3.up, deltaWobble, Space.Self);
+            _currentWobbleAngle = targetWobble;
+        }
+
+        // カタカタ SFX: 一定間隔で「カタッ」を鳴らす
+        if (_rattleAudioSource != null && rattleSfxClip != null && rattleSfxInterval > 0f)
+        {
+            _rattleSfxTimer += Time.deltaTime;
+            if (_rattleSfxTimer >= rattleSfxInterval)
+            {
+                _rattleSfxTimer -= rattleSfxInterval;
+                float v = rattleSfxPitchVariance;
+                _rattleAudioSource.pitch = (v > 0f) ? 1f + Random.Range(-v, v) : 1f;
+                _rattleAudioSource.PlayOneShot(rattleSfxClip, rattleSfxVolume);
+            }
         }
     }
 

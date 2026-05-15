@@ -49,6 +49,7 @@ public class PinballSplitFXManager : MonoBehaviour
 
     private int _sfxPlayedThisFrame = 0;
     private int _sparksSpawnedThisFrame = 0;
+    private int _impactPlayedThisFrame = 0;
 
     void Awake()
     {
@@ -89,6 +90,7 @@ public class PinballSplitFXManager : MonoBehaviour
         // 毎フレーム 0 リセット (per-frame cap 用)
         _sfxPlayedThisFrame = 0;
         _sparksSpawnedThisFrame = 0;
+        _impactPlayedThisFrame = 0;
     }
 
     /// <summary>分裂時に呼ぶ。火花 VFX と SFX を発火 (フレーム上限内のみ)。</summary>
@@ -129,5 +131,32 @@ public class PinballSplitFXManager : MonoBehaviour
         src.pitch = (v > 0f) ? 1f + Random.Range(-v, v) : 1f;
         src.transform.position = worldPos;
         src.PlayOneShot(clip, _config.splitSfxVolume);
+    }
+
+    /// <summary>
+    /// ボールが壁/床/消費済ピン等に衝突した時に呼ぶ。衝突速度に応じて音量が変わる。
+    /// 一定速度未満は無音。フレーム上限内のみ発火。
+    /// </summary>
+    public void OnImpact(Vector3 worldPos, float impactSpeed)
+    {
+        if (_config == null) return;
+        var clip = _config.wallImpactSfxClip;
+        if (clip == null) return;
+        if (_sourcePool == null || _sourcePool.Length == 0) return;
+        if (impactSpeed < _config.wallImpactMinSpeed) return;
+        if (_config.maxImpactSfxPerFrame > 0 && _impactPlayedThisFrame >= _config.maxImpactSfxPerFrame) return;
+        _impactPlayedThisFrame++;
+
+        var src = _sourcePool[_nextSourceIdx];
+        _nextSourceIdx = (_nextSourceIdx + 1) % _sourcePool.Length;
+
+        float v = _config.wallImpactPitchVariance;
+        src.pitch = (v > 0f) ? 1f + Random.Range(-v, v) : 1f;
+        src.transform.position = worldPos;
+
+        // 速度に応じた音量 (referenceSpeed で max)
+        float refSpeed = Mathf.Max(0.01f, _config.wallImpactReferenceSpeed);
+        float volScale = Mathf.Clamp01(impactSpeed / refSpeed);
+        src.PlayOneShot(clip, _config.wallImpactSfxVolume * volScale);
     }
 }

@@ -217,19 +217,19 @@ public class PinballBallController : MonoBehaviour
         // PinballPin (Enforce / Split) を最優先でハンドル
         var pin = collision.collider.GetComponent<PinballPin>();
         if (pin == null) pin = collision.collider.GetComponentInParent<PinballPin>();
-        if (pin != null)
+        if (pin != null && !pin.IsConsumed)
         {
-            if (pin.IsConsumed) return; // 既に黒く消費済み → 効果なし
             switch (pin.Type)
             {
                 case PinballPin.PinType.Enforce:
                     pin.TryConsume();
                     EnforceLevelUp();
+                    PlayImpactSfx(collision); // Enforce 接触も「コツン」で鳴らす
                     return;
                 case PinballPin.PinType.Split:
                     pin.TryConsume();
                     BeginSplit(collision);
-                    return;
+                    return; // 分裂時は分裂音優先 (impact SFX は鳴らさない)
             }
         }
 
@@ -237,7 +237,21 @@ public class PinballBallController : MonoBehaviour
         if (collision.gameObject.CompareTag(splitTargetTag))
         {
             BeginSplit(collision);
+            return;
         }
+
+        // 上記いずれにも該当しない通常衝突 (壁/床/消費済ピン等) → 衝突 SFX
+        PlayImpactSfx(collision);
+    }
+
+    void PlayImpactSfx(Collision collision)
+    {
+        if (PinballSplitFXManager.Instance == null) return;
+        Vector3 hitPos = collision.contactCount > 0
+            ? collision.GetContact(0).point
+            : transform.position;
+        float impactSpeed = collision.relativeVelocity.magnitude;
+        PinballSplitFXManager.Instance.OnImpact(hitPos, impactSpeed);
     }
 
     void BeginSplit(Collision collision)
