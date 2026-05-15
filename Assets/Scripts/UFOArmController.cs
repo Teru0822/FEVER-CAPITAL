@@ -81,6 +81,14 @@ public class UFOArmController : MonoBehaviour
     [Tooltip("叩き起こし処理を実行する間隔（秒）。処理落ちを防ぐため毎フレームは行いません")]
     public float wakeUpInterval = 0.2f;
 
+    [Header("【新規】第3アーム用 吸着(マグネット)機能")]
+    [Tooltip("オンにすると、爪が閉じる時と上昇する時に周囲のコインを吸着します")]
+    public bool isMagnetMode = false;
+    [Tooltip("吸着する範囲（半径）")]
+    public float magnetRadius = 3.0f;
+    [Tooltip("中心に引き寄せる力")]
+    public float magnetForce = 50f;
+
     // ─────────────────────────────────────
     // 内部状態
     private ArmState _state = ArmState.Idle;
@@ -203,7 +211,14 @@ public class UFOArmController : MonoBehaviour
         _stateTimer = 1.0f; // 1秒間待機する
     }
 
-    // ─────────────────────────────────────
+    /// <summary>ButtonController から呼ばれる：アームを手動で開閉する（トグル）</summary>
+    public void ToggleClaw()
+    {
+        // 今の状態の逆にする（開いていれば閉じ、閉じていれば開く）
+        _wantFingerOpen = !_wantFingerOpen;
+        Debug.Log($"[UFOArmController] 手動開閉ボタンが押されました！ 開く={_wantFingerOpen}");
+    }
+
     void Update()
     {
         UpdateMovement();
@@ -212,6 +227,7 @@ public class UFOArmController : MonoBehaviour
         UpdateFingersAndSway();
         UpdateStateMachine();
         WakeUpNearbyCoins();
+        UpdateMagnet();
     }
 
     void WakeUpNearbyCoins()
@@ -247,6 +263,47 @@ public class UFOArmController : MonoBehaviour
             if (coin != null)
             {
                 coin.WakeUp();
+            }
+        }
+    }
+
+    void UpdateMagnet()
+    {
+        if (!isMagnetMode) return;
+        
+        // 爪が強制的に開かれている（リリースボタンを押した等）場合は吸着をやめる
+        if (_wantFingerOpen) return;
+
+        // 爪が閉まる待機中、または上昇中のみ吸着を有効にする
+        if (_state != ArmState.Grabbing && _state != ArmState.Ascending) return;
+        if (fingerParts == null || fingerParts.Length == 0 || fingerParts[0] == null) return;
+
+        // 吸着の中心点はアームの根本（fingerの親）
+        Transform parentFolder = fingerParts[0].parent;
+        Vector3 centerPos = (parentFolder != null) ? parentFolder.position : transform.position;
+
+        // 中心を少し下にする（爪の空間の中心に集めるため）
+        centerPos.y -= 0.5f;
+
+        Collider[] hits = Physics.OverlapSphere(centerPos, magnetRadius);
+        foreach (var hit in hits)
+        {
+            Rigidbody rb = hit.GetComponent<Rigidbody>();
+            CoinOptimizer coin = hit.GetComponent<CoinOptimizer>();
+            
+            if (rb != null && coin != null)
+            {
+                // 吸着するためにまず叩き起こす
+                coin.WakeUp();
+                
+                // コインを中心に向かって吸い寄せる
+                Vector3 directionToCenter = (centerPos - hit.transform.position).normalized;
+                
+                // 距離が近いほど強く吸着する
+                float distance = Vector3.Distance(centerPos, hit.transform.position);
+                float forceMultiplier = Mathf.Clamp01(1.0f - (distance / magnetRadius));
+                
+                rb.AddForce(directionToCenter * magnetForce * forceMultiplier, ForceMode.Acceleration);
             }
         }
     }

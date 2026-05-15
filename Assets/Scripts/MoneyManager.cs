@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using TMPro; // 追加
 
 /// <summary>
 /// ゲーム内のお金を管理するシングルトンクラス
@@ -11,6 +12,10 @@ public class MoneyManager : MonoBehaviour
     [Header("初期設定")]
     [SerializeField] private float _currentMoney = 10000;
     public float CurrentMoney => _currentMoney;
+
+    [Header("画面表示(UI)")]
+    [Tooltip("現在のお金を表示するUIテキスト")]
+    public TextMeshProUGUI moneyText;
 
 
     [Header("ターン管理")]
@@ -39,6 +44,20 @@ public class MoneyManager : MonoBehaviour
         _previousDecreaseAmount = _initialDecreaseAmount;
     }
 
+    private void Start()
+    {
+        UpdateMoneyUI();
+    }
+
+    private void UpdateMoneyUI()
+    {
+        if (moneyText != null)
+        {
+            // \nで改行を入れて数字を見やすくする例
+            moneyText.text = $"Money:\n¥{Mathf.FloorToInt(_currentMoney):N0}";
+        }
+    }
+
     /// <summary>
     /// お金を増加させる
     /// </summary>
@@ -50,6 +69,7 @@ public class MoneyManager : MonoBehaviour
 
         float finalAmount = amount * multiplier;
         _currentMoney += finalAmount;
+        UpdateMoneyUI();
         Debug.Log($"お金が増加しました: +{finalAmount} (現在: {_currentMoney})");
     }
 
@@ -64,6 +84,7 @@ public class MoneyManager : MonoBehaviour
 
         float finalAmount = amount * multiplier;
         _currentMoney -= finalAmount;
+        UpdateMoneyUI();
         Debug.Log($"お金が減少しました: -{finalAmount} (現在: {_currentMoney})");
 
         CheckGameOver();

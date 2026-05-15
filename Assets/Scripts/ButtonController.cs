@@ -7,9 +7,15 @@ using UnityEngine.InputSystem;
 /// </summary>
 public class ButtonController : MonoBehaviour
 {
+    public enum ButtonType { StartDescent, ToggleClaw }
+
     [Header("連携")]
     [Tooltip("UFOArmController が付いているオブジェクト")]
     public UFOArmController armController;
+
+    [Header("ボタンの種類")]
+    [Tooltip("このボタンを押したときの動作を選びます")]
+    public ButtonType buttonType = ButtonType.StartDescent;
 
     [Header("ボタン演出")]
     [Tooltip("ボタンが押し込まれるローカルY方向の量")]
@@ -39,7 +45,18 @@ public class ButtonController : MonoBehaviour
             if (IsMouseOverThis(mouse.position.ReadValue()))
             {
                 _isPressed = true;
-                armController?.StartDescentCycle();
+                
+                if (armController != null)
+                {
+                    if (buttonType == ButtonType.StartDescent)
+                    {
+                        armController.StartDescentCycle();
+                    }
+                    else if (buttonType == ButtonType.ToggleClaw)
+                    {
+                        armController.ToggleClaw();
+                    }
+                }
             }
         }
 
