@@ -29,8 +29,8 @@ namespace MiniGames.FallBall
         [SerializeField] private Rigidbody parentRigidbody;
         [Tooltip("左右エイムの対象。未設定の場合は自身(transform)を回転。全体が回転してしまう場合は専用の親オブジェクトを設定してください")]
         [SerializeField] private Transform aimTarget;
-        [Tooltip("左右エイムを無効化する場合はチェックを外してください")]
-        [SerializeField] private bool enableYawAim = true;
+        [Tooltip("左右エイムを無効化する場合はチェックを外してください（デフォルト: OFF）")]
+        [SerializeField] private bool enableYawAim = false;
 
         [Header("Settings (Rotation Aim)")]
         [Tooltip("マウス左右移動による回転（エイム）の感度")]
@@ -66,11 +66,9 @@ namespace MiniGames.FallBall
         // ドラッグ開始時のベースとマウス位置とのズレを記憶
         private float dragOffsetZ;
 
-        // ピボット方式用: 棒の初期ワールド状態を保存
-        private Vector3 leftBarInitialWorldPos;
-        private Quaternion leftBarInitialWorldRot;
-        private Vector3 rightBarInitialWorldPos;
-        private Quaternion rightBarInitialWorldRot;
+        // ピボット方式用: 支柱位置に生成したヘルパーオブジェクト
+        private Transform leftPivotHelper;
+        private Transform rightPivotHelper;
 
         void Start()
         {
@@ -81,16 +79,23 @@ namespace MiniGames.FallBall
                     Debug.LogError("🚨【重要エラー】Inspectorの『Operation Handle』にハンドルがドラッグ＆ドロップされていません！");
                 }
 
-                // ピボット方式用: 棒の初期ワールド状態を保存
-                if (leftBar != null)
+                // ピボットが設定されている場合、支柱位置にヘルパーオブジェクトを生成し、
+                // 棒をその子にする。ヘルパーを回転させると棒が支柱を軸に回転する。
+                if (leftPivot != null && leftBar != null)
                 {
-                    leftBarInitialWorldPos = leftBar.position;
-                    leftBarInitialWorldRot = leftBar.rotation;
+                    leftPivotHelper = new GameObject("LeftPivotHelper").transform;
+                    leftPivotHelper.SetParent(leftBar.parent, false);
+                    leftPivotHelper.position = leftPivot.position;
+                    leftPivotHelper.rotation = leftBar.parent != null ? leftBar.parent.rotation : Quaternion.identity;
+                    leftBar.SetParent(leftPivotHelper, true); // ワールド位置を保持したまま子にする
                 }
-                if (rightBar != null)
+                if (rightPivot != null && rightBar != null)
                 {
-                    rightBarInitialWorldPos = rightBar.position;
-                    rightBarInitialWorldRot = rightBar.rotation;
+                    rightPivotHelper = new GameObject("RightPivotHelper").transform;
+                    rightPivotHelper.SetParent(rightBar.parent, false);
+                    rightPivotHelper.position = rightPivot.position;
+                    rightPivotHelper.rotation = rightBar.parent != null ? rightBar.parent.rotation : Quaternion.identity;
+                    rightBar.SetParent(rightPivotHelper, true);
                 }
 
                 if (parentRigidbody == null) parentRigidbody = GetComponent<Rigidbody>();
@@ -234,9 +239,10 @@ namespace MiniGames.FallBall
 
         private void FixedUpdate()
         {
-            // 物理演算（回転の適用）のみをFixedUpdateで行う
-            if (Application.isPlaying && parentRigidbody != null && parentRigidbody.isKinematic)
+            // 左右エイムが有効な場合のみ物理回転を適用
+            if (Application.isPlaying && enableYawAim && parentRigidbody != null && parentRigidbody.isKinematic)
             {
+                Transform yawTarget = aimTarget != null ? aimTarget : transform;
                 Quaternion newRot = initialRotation * Quaternion.Euler(0, currentYaw, 0);
                 parentRigidbody.MoveRotation(newRot);
             }
@@ -259,23 +265,17 @@ namespace MiniGames.FallBall
 
             float finalAngle = invertBarRotation ? -currentAngle : currentAngle;
 
-            if (leftPivot != null || rightPivot != null)
+            if (leftPivotHelper != null || rightPivotHelper != null)
             {
-                // ピボット方式: ピボット位置を中心に棒を回転
-                // 初期ワールド座標を基準に、ピボット位置の周りを回転させる
-                if (leftPivot != null && leftBar != null)
+                // ヘルパー方式: 支柱位置に作った空オブジェクトを回転させる
+                // 棒はその子なので、支柱を軸として自然に回転する
+                if (leftPivotHelper != null)
                 {
-                    Quaternion rot = Quaternion.AngleAxis(-finalAngle, Vector3.up);
-                    Vector3 offset = leftBarInitialWorldPos - leftPivot.position;
-                    leftBar.position = leftPivot.position + rot * offset;
-                    leftBar.rotation = rot * leftBarInitialWorldRot;
+                    leftPivotHelper.localRotation = Quaternion.Euler(0, -finalAngle, 0);
                 }
-                if (rightPivot != null && rightBar != null)
+                if (rightPivotHelper != null)
                 {
-                    Quaternion rot = Quaternion.AngleAxis(finalAngle, Vector3.up);
-                    Vector3 offset = rightBarInitialWorldPos - rightPivot.position;
-                    rightBar.position = rightPivot.position + rot * offset;
-                    rightBar.rotation = rot * rightBarInitialWorldRot;
+                    rightPivotHelper.localRotation = Quaternion.Euler(0, finalAngle, 0);
                 }
             }
             else

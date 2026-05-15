@@ -68,12 +68,14 @@ namespace MiniGames.FallBall
             // シェイプキーモード用: インデックスを自動取得
             if (rodRenderer != null)
             {
+                LogBlendShapeNames(rodRenderer, "昇降棒");
                 rodBlendShapeIndex = FindBlendShapeIndex(rodRenderer, "キー１");
                 Debug.Log($"FallBallRefill: 昇降棒シェイプキー index={rodBlendShapeIndex}");
                 if (rodBlendShapeIndex < 0) rodBlendShapeIndex = 0;
             }
             if (armRenderer != null)
             {
+                LogBlendShapeNames(armRenderer, "アーム");
                 armBlendShapeIndex = FindBlendShapeIndex(armRenderer, "キー１");
                 Debug.Log($"FallBallRefill: アームシェイプキー index={armBlendShapeIndex}");
                 if (armBlendShapeIndex < 0) armBlendShapeIndex = 0;
@@ -115,12 +117,37 @@ namespace MiniGames.FallBall
         }
 
         /// <summary>
+        /// SkinnedMeshRenderer のシェイプキー名を全てログ出力します（デバッグ用）。
+        /// </summary>
+        private void LogBlendShapeNames(SkinnedMeshRenderer renderer, string label)
+        {
+            if (renderer == null || renderer.sharedMesh == null)
+            {
+                Debug.Log($"FallBallRefill: {label} - sharedMesh が null です");
+                return;
+            }
+            int count = renderer.sharedMesh.blendShapeCount;
+            if (count == 0)
+            {
+                Debug.Log($"FallBallRefill: {label} - シェイプキーがありません（count=0）");
+                return;
+            }
+            for (int i = 0; i < count; i++)
+            {
+                string name = renderer.sharedMesh.GetBlendShapeName(i);
+                Debug.Log($"FallBallRefill: {label} シェイプキー[{i}] = \"{name}\"");
+            }
+        }
+
+        /// <summary>
         /// ボール補充シーケンスを実行するコルーチン。
         /// </summary>
         public IEnumerator PlayRefillSequence()
         {
             if (IsRefilling) yield break;
             IsRefilling = true;
+
+            Debug.Log($"FallBallRefill: PlayRefillSequence 開始 (clipMode={refillClip != null && legacyAnimation != null})");
 
             if (refillClip != null && legacyAnimation != null)
             {
@@ -132,6 +159,7 @@ namespace MiniGames.FallBall
             }
 
             IsRefilling = false;
+            Debug.Log("FallBallRefill: PlayRefillSequence 完了");
         }
 
         /// <summary>
@@ -143,7 +171,12 @@ namespace MiniGames.FallBall
             GameObject newBall = SpawnBallInArm();
 
             // アニメーション再生
+            Debug.Log($"FallBallRefill: アニメーション「{refillClip.name}」を再生開始");
             legacyAnimation.Play(refillClip.name);
+            
+            // 再生状態を確認
+            bool isPlaying = legacyAnimation.IsPlaying(refillClip.name);
+            Debug.Log($"FallBallRefill: IsPlaying = {isPlaying}");
 
             // アニメーション完了を待つ
             yield return new WaitForSeconds(refillClip.length);
