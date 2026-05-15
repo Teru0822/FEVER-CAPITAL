@@ -248,7 +248,10 @@ namespace MiniGames.FallBall
                 return;
             }
 
-            Debug.Log($"FallBallRefill: ボール {ball.name} をアームから切り離し物理演算を開始します");
+            // 強制的にアクティブにする
+            ball.SetActive(true);
+
+            Debug.Log($"FallBallRefill: ボール {ball.name} をアームから切り離し物理演算を開始します (Active={ball.activeSelf})");
             ball.transform.SetParent(null);
             Rigidbody rb = ball.GetComponent<Rigidbody>();
             if (rb != null)
