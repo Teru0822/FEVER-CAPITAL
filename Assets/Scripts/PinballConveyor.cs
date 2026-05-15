@@ -40,6 +40,13 @@ public class PinballConveyor : MonoBehaviour
     [Tooltip("Awake 時にこの Collider へ bounciness=0 の PhysicsMaterial を自動付与する")]
     [SerializeField] private bool autoApplyNoBounceMaterial = true;
 
+    [Header("重力切替")]
+    [Tooltip("ベルトに触れたボールの PinballBallController.gravity をこの値に上書きする")]
+    [SerializeField] private bool changeGravityOnTouch = true;
+
+    [Tooltip("接触時に設定する重力ベクトル (m/s²)。既定 (0, -9.81, 0) で純粋な垂直落下に切り替わる。")]
+    [SerializeField] private Vector3 onTouchGravity = new Vector3(0f, -9.81f, 0f);
+
     [Header("適用対象")]
     [Tooltip("対象タグ (空なら Rigidbody を持つ全衝突物に適用)")]
     [SerializeField] private string targetTag = "";
@@ -103,6 +110,13 @@ public class PinballConveyor : MonoBehaviour
         if (gravityCancelBoost > 0f)
         {
             rb.AddForce(worldDir * gravityCancelBoost, ForceMode.Acceleration);
+        }
+
+        // ボール固有の gravity を上書き (Conveyor 通過後はこの値で動く)
+        if (changeGravityOnTouch)
+        {
+            var ctrl = rb.GetComponent<PinballBallController>();
+            if (ctrl != null) ctrl.gravity = onTouchGravity;
         }
     }
 
