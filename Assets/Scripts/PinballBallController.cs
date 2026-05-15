@@ -16,6 +16,13 @@ public class PinballBallController : MonoBehaviour
 
     public float bounciness = 0.5f;
 
+    [Tooltip("ボールの摩擦係数。0 + frictionCombine=Maximum でボール同士の摩擦のみ0、他面とは面側摩擦が適用される。")]
+    [Range(0f, 1f)]
+    public float friction = 0f;
+
+    [Tooltip("摩擦の合成方法。Maximum 推奨 (Maximum は Combine の最高優先度なので、相手が何でも Maximum 合成が採用される)")]
+    public PhysicsMaterialCombine frictionCombine = PhysicsMaterialCombine.Maximum;
+
     [Header("分裂設定")]
     [Tooltip("衝突時に分裂するオブジェクトのタグ")]
     public string splitTargetTag = "Splitter";
@@ -122,15 +129,15 @@ public class PinballBallController : MonoBehaviour
         rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
 
         sphereCol = GetComponent<SphereCollider>();
-        if (sphereCol.material == null)
+        if (sphereCol.sharedMaterial == null)
         {
             PhysicsMaterial mat = new PhysicsMaterial("BallPhysics");
             mat.bounciness = bounciness;
-            mat.dynamicFriction = 0.3f;
-            mat.staticFriction = 0.3f;
-            mat.frictionCombine = PhysicsMaterialCombine.Average;
+            mat.dynamicFriction = friction;
+            mat.staticFriction = friction;
+            mat.frictionCombine = frictionCombine;
             mat.bounceCombine = PhysicsMaterialCombine.Maximum;
-            sphereCol.material = mat;
+            sphereCol.sharedMaterial = mat;
         }
 
         SetupBallLayer();
