@@ -30,11 +30,14 @@ namespace MiniGames.FallBall
         [Header("ボール設定")]
         [Tooltip("鉄球のテンプレート（球.002）")]
         [SerializeField] private GameObject ballTemplate;
-        
-        [Tooltip("ボールの初期配置先（アームの Transform）")]
+        [Header("Model References")]
+        [Tooltip("ボールが生成される場所（アームの先端など）")]
         [SerializeField] private Transform ballSpawnParent;
+        
+        [Tooltip("コライダー無効化の対象となるアームのルート")]
+        [SerializeField] private Transform armRoot;
 
-        [Header("タイミング設定（シェイプキーモード用）")]
+        [Header("Components (Legacy Mode)")]
         [Tooltip("昇降棒が伸びる時間（秒）")]
         [SerializeField] private float extendDuration = 1.0f;
         
@@ -60,7 +63,9 @@ namespace MiniGames.FallBall
 
         private void SetArmCollidersEnabled(bool enabled)
         {
-            Collider[] colliders = GetComponentsInChildren<Collider>();
+            Transform root = armRoot != null ? armRoot : transform;
+            Collider[] colliders = root.GetComponentsInChildren<Collider>();
+            
             foreach (var col in colliders)
             {
                 if (!col.isTrigger)
@@ -68,7 +73,7 @@ namespace MiniGames.FallBall
                     col.enabled = enabled;
                 }
             }
-            Debug.Log($"FallBallRefill: アームのコライダーを {(enabled ? "有効" : "無効")} にしました");
+            Debug.Log($"FallBallRefill: {root.name} 配下のコライダーを {(enabled ? "有効" : "無効")} にしました");
         }
 
         // シェイプキーのインデックス
