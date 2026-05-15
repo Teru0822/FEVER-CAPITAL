@@ -78,8 +78,8 @@ namespace MiniGames.FallBall
 
         private System.Collections.IEnumerator InitialRefill()
         {
-            // 起動直後だとアニメーションが正しく開始されない場合があるため、1フレーム待つ
-            yield return null;
+            // 起動直後だとアニメーションが正しく開始されない場合があるため、少し待つ
+            yield return new WaitForSeconds(0.5f);
             Debug.Log("FallBallGameManager: 起動時の自動補充（アニメーション付き）を実行します。");
             SpawnNewBall();
         }

@@ -167,18 +167,19 @@ namespace MiniGames.FallBall
         /// </summary>
         private IEnumerator PlayClipRefill()
         {
-            // 1. 先にアニメーション再生を開始
             Debug.Log($"FallBallRefill: 補充アニメーション「{refillClip.name}」を開始します");
+            
+            // 1. ボールをアームに固定して生成
+            GameObject newBall = SpawnBallInArm();
+
+            // 2. アニメーション再生
             legacyAnimation.Play(refillClip.name);
             
-            // 2. アニメーションが「ボールを離す位置」に来るまで待機（とりあえず全長の90%付近）
-            yield return new WaitForSeconds(refillClip.length * 0.9f);
+            // 3. アニメーション完了まで待機
+            yield return new WaitForSeconds(refillClip.length);
 
-            // 3. ボールをスポーンして落とす（親子関係なし）
-            GameObject newBall = SpawnBallInArm();
-            
-            // 残りの時間を待機
-            yield return new WaitForSeconds(refillClip.length * 0.1f);
+            // 4. 最後に切り離して物理を有効にする
+            ReleaseBall(newBall);
             Debug.Log("FallBallRefill: 補充シーケンス完了");
         }
 
@@ -188,44 +189,35 @@ namespace MiniGames.FallBall
         private IEnumerator PlayShapeKeyRefill()
         {
             Debug.Log("FallBallRefill: シェイプキーによる補充を開始します");
+            GameObject newBall = SpawnBallInArm();
 
-            // 1. アームを下ろす・開く動き
             yield return StartCoroutine(AnimateBlendShape(rodRenderer, rodBlendShapeIndex, 0f, 100f, extendDuration));
             yield return StartCoroutine(AnimateBlendShape(armRenderer, armBlendShapeIndex, 0f, 100f, openDuration));
 
-            // 2. ボールをスポーンして落とす
             yield return new WaitForSeconds(dropDelay);
-            SpawnBallInArm();
+            
+            ReleaseBall(newBall);
 
-            // 3. アームを戻す
             StartCoroutine(AnimateBlendShape(armRenderer, armBlendShapeIndex, 100f, 0f, retractDuration));
             yield return StartCoroutine(AnimateBlendShape(rodRenderer, rodBlendShapeIndex, 100f, 0f, retractDuration));
         }
 
         private GameObject SpawnBallInArm()
         {
-            if (ballTemplate == null)
-            {
-                Debug.LogError("FallBallRefill: ballTemplate が未設定です！");
-                return null;
-            }
-            if (ballSpawnParent == null)
-            {
-                Debug.LogError("FallBallRefill: ballSpawnParent (出現位置) が未設定です！");
-                return null;
-            }
+            if (ballTemplate == null || ballSpawnParent == null) return null;
 
-            // テンプレート自体がシーンにある場合、非アクティブであることを確認
+            // テンプレートの保護
             if (ballTemplate.activeInHierarchy && ballTemplate.scene.name != null)
             {
                 ballTemplate.SetActive(false);
             }
 
-            // 親を指定せずワールドに直接生成（最初からはなす）
-            GameObject newBall = Instantiate(ballTemplate, ballSpawnParent.position, ballSpawnParent.rotation);
+            // 親（アーム）に固定して生成
+            GameObject newBall = Instantiate(ballTemplate, ballSpawnParent);
             newBall.name = "RefilledBall_" + Time.frameCount;
             
-            // スケールをテンプレートに合わせる（親がいないので単純コピーでOK）
+            // アームの部品（棒など）と重なりにくいように少し下(Y)にずらす（串刺し防止）
+            newBall.transform.localPosition = new Vector3(0, -0.05f, 0);
             newBall.transform.localScale = ballTemplate.transform.localScale;
             
             newBall.SetActive(true);
