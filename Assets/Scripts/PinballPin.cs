@@ -71,6 +71,8 @@ public class PinballPin : MonoBehaviour
     private bool _consumed = false;
     private Material _pinTopMaterialInstance;
     private Vector3 _pinWingInitialScale = Vector3.one;
+    // XZ 一律拡縮の基準サイズ (初期 X と Z の平均)。これに pulse 倍率を掛けて X = Z にセット
+    private float _pinWingBaseSizeXZ = 1f;
     private float _pulseTimer = 0f;
 
     public bool IsConsumed => _consumed;
@@ -102,7 +104,13 @@ public class PinballPin : MonoBehaviour
             var w = FindChildRecursive(transform, pinWingChildName);
             if (w != null) pinWing = w;
         }
-        if (pinWing != null) _pinWingInitialScale = pinWing.localScale;
+        if (pinWing != null)
+        {
+            _pinWingInitialScale = pinWing.localScale;
+            // XZ 1:1 用の基準サイズは初期 X/Z の平均
+            _pinWingBaseSizeXZ = (Mathf.Abs(_pinWingInitialScale.x) + Mathf.Abs(_pinWingInitialScale.z)) * 0.5f;
+            if (_pinWingBaseSizeXZ < 0.0001f) _pinWingBaseSizeXZ = 1f;
+        }
     }
 
     void Update()
@@ -115,18 +123,18 @@ public class PinballPin : MonoBehaviour
             transform.Rotate(Vector3.up, yRotationSpeed * Time.deltaTime, Space.Self);
         }
 
-        // pin_wing の XZ パルス拡縮 (Y は不変)
+        // pin_wing の XZ パルス拡縮 (Y は不変、X と Z は常に同値で 1:1)
         if (pinWing != null && pulseAmplitude > 0f)
         {
             _pulseTimer += Time.deltaTime;
             if (_pulseTimer >= pulsePeriod) _pulseTimer -= pulsePeriod;
             float t = _pulseTimer / pulsePeriod;
             float pulse = EvaluatePulse(t); // 0~1
-            float s = 1f + pulse * pulseAmplitude;
+            float currentSize = _pinWingBaseSizeXZ * (1f + pulse * pulseAmplitude);
             pinWing.localScale = new Vector3(
-                _pinWingInitialScale.x * s,
+                currentSize,
                 _pinWingInitialScale.y,
-                _pinWingInitialScale.z * s
+                currentSize
             );
         }
     }
@@ -157,10 +165,10 @@ public class PinballPin : MonoBehaviour
         if (_consumed) return false;
         _consumed = true;
         ApplyEmission(consumedEmissionColor);
-        // パルス停止時はスケールを初期値に戻す (拡張途中で固まらないように)
+        // パルス停止時はスケールを 1:1 ベースサイズに戻す (拡張途中で固まらないように)
         if (!keepAnimatingWhenConsumed && pinWing != null)
         {
-            pinWing.localScale = _pinWingInitialScale;
+            pinWing.localScale = new Vector3(_pinWingBaseSizeXZ, _pinWingInitialScale.y, _pinWingBaseSizeXZ);
         }
         return true;
     }
