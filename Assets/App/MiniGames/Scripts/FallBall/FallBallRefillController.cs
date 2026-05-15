@@ -44,13 +44,29 @@ namespace MiniGames.FallBall
         [Tooltip("アームを閉じつつ昇降棒を縮める時間（秒）")]
         [SerializeField] private float retractDuration = 1.0f;
         
-        [Tooltip("アームが開いてからボールを離すまでの待機時間（秒）")]
-        [SerializeField] private float dropDelay = 0.2f;
+        [Header("Frame Settings")]
+        [Tooltip("コライダーを無効化する開始フレーム")]
+        [SerializeField] private int disableStartFrame = 45;
+        [Tooltip("コライダーを有効化に戻す終了フレーム")]
+        [SerializeField] private int disableEndFrame = 60;
 
         /// <summary>
         /// 補充シーケンスが実行中かどうか。
         /// </summary>
         public bool IsRefilling { get; private set; }
+
+        private void SetArmCollidersEnabled(bool enabled)
+        {
+            Collider[] colliders = GetComponentsInChildren<Collider>();
+            foreach (var col in colliders)
+            {
+                if (!col.isTrigger)
+                {
+                    col.enabled = enabled;
+                }
+            }
+            Debug.Log($"FallBallRefill: アームのコライダーを {(enabled ? "有効" : "無効")} にしました");
+        }
 
         // シェイプキーのインデックス
         private int rodBlendShapeIndex = -1;
@@ -175,8 +191,23 @@ namespace MiniGames.FallBall
             // 2. アニメーション再生
             legacyAnimation.Play(refillClip.name);
             
-            // 3. アニメーション完了まで待機
-            yield return new WaitForSeconds(refillClip.length);
+            // 3. フレーム指定によるコライダー制御
+            float fps = refillClip.frameRate;
+            float startTime = (float)disableStartFrame / fps;
+            float endTime = (float)disableEndFrame / fps;
+
+            // 無効化タイミングまで待機
+            yield return new WaitForSeconds(startTime);
+            SetArmCollidersEnabled(false);
+
+            // 有効化タイミングまで待機
+            yield return new WaitForSeconds(Mathf.Max(0, endTime - startTime));
+            SetArmCollidersEnabled(true);
+
+            // アニメーション完了を待つ（すでに時間が経過している分を引く）
+            float remaining = refillClip.length - endTime;
+            if (remaining > 0) yield return new WaitForSeconds(remaining);
+            
             Debug.Log("FallBallRefill: 補充シーケンス完了");
         }
 
@@ -220,42 +251,14 @@ namespace MiniGames.FallBall
                 rb.linearVelocity = Vector3.zero;
                 rb.angularVelocity = Vector3.zero;
                 
-                // 物理演算の安定化設定
-                rb.interpolation = RigidbodyInterpolation.Interpolate; // 動きを滑らかに
-                rb.collisionDetectionMode = CollisionDetectionMode.Continuous; // 突き抜け防止
-                rb.sleepThreshold = 0f; // スリープ（停止）を禁止
+                rb.interpolation = RigidbodyInterpolation.Interpolate;
+                rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
+                rb.sleepThreshold = 0f;
                 
-                Debug.Log($"FallBallRefill: ボールを独立生成（物理安定化設定）: {newBall.name}");
-            }
-
-            // 衝突無視の設定を復元
-            Collider ballCollider = newBall.GetComponent<Collider>();
-            if (ballCollider != null)
-            {
-                Collider[] myColliders = GetComponentsInChildren<Collider>();
-                foreach (var otherCollider in myColliders)
-                {
-                    if (otherCollider != ballCollider && !otherCollider.isTrigger)
-                    {
-                        if (otherCollider.gameObject.name.Contains("arm") || otherCollider.gameObject.name.Contains("rod"))
-                        {
-                            Physics.IgnoreCollision(ballCollider, otherCollider, true);
-                            StartCoroutine(RestoreCollision(ballCollider, otherCollider, 1.0f));
-                        }
-                    }
-                }
+                Debug.Log($"FallBallRefill: ボールを独立生成: {newBall.name}");
             }
 
             return newBall;
-        }
-
-        private IEnumerator RestoreCollision(Collider c1, Collider c2, float delay)
-        {
-            yield return new WaitForSeconds(delay);
-            if (c1 != null && c2 != null)
-            {
-                Physics.IgnoreCollision(c1, c2, false);
-            }
         }
 
         private void ReleaseBall(GameObject ball)
