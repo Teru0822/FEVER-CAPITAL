@@ -202,9 +202,12 @@ namespace MiniGames.FallBall
         {
             if (ballTemplate == null || ballSpawnParent == null) return null;
 
-            // 親を指定せず、現在のスポーン位置に生成（最初からはなす）
+            // 親を指定せず、現在のスポーン位置に生成
             GameObject newBall = Instantiate(ballTemplate, ballSpawnParent.position, ballSpawnParent.rotation);
             newBall.name = "RefilledBall_" + Time.frameCount;
+            
+            // 重要：アウト判定(OutZone)で検知されるようにタグを設定
+            newBall.tag = "Ball";
             
             newBall.transform.localScale = ballTemplate.transform.localScale;
             newBall.SetActive(true);
@@ -216,23 +219,31 @@ namespace MiniGames.FallBall
                 rb.linearVelocity = Vector3.zero;
             }
 
-            // 【重要】串刺し・めり込み防止：アーム側の全コライダーとの衝突を一時的に無視する
+            // 【改善】アームの動く部品（自分自身の子要素）とのみ衝突を無視する
             Collider ballCollider = newBall.GetComponent<Collider>();
             if (ballCollider != null)
             {
-                Collider[] armColliders = GetComponentsInChildren<Collider>();
-                foreach (var armCollider in armColliders)
+                // 自分（RefillController）の子要素にあるコライダーのみを対象にする
+                // ただし、もしミニゲーム全体が自分自身の子なら、より慎重に「アーム」のルートを指定すべき
+                Collider[] myColliders = GetComponentsInChildren<Collider>();
+                foreach (var otherCollider in myColliders)
                 {
-                    if (armCollider != ballCollider && !armCollider.isTrigger)
+                    // 自分自身やトリガーは除外、かつ「棒」や「ゴール」を無視しないように注意
+                    // ここでは「アーム」に関連するものだけを無視するように、名前などでフィルタリングするか
+                    // もしくは単純に「アーム」のルートトランスフォームを限定して取得する
+                    if (otherCollider != ballCollider && !otherCollider.isTrigger)
                     {
-                        Physics.IgnoreCollision(ballCollider, armCollider, true);
-                        // 1.5秒後に衝突判定を元に戻すコルーチン
-                        StartCoroutine(RestoreCollision(ballCollider, armCollider, 1.5f));
+                        // 念のため、他の重要なコライダー（ゴールなど）を無視しないように
+                        if (otherCollider.gameObject.name.Contains("arm") || otherCollider.gameObject.name.Contains("rod"))
+                        {
+                            Physics.IgnoreCollision(ballCollider, otherCollider, true);
+                            StartCoroutine(RestoreCollision(ballCollider, otherCollider, 1.0f));
+                        }
                     }
                 }
             }
 
-            Debug.Log($"FallBallRefill: ボールを独立生成（衝突無視設定）: {newBall.name}");
+            Debug.Log($"FallBallRefill: ボールを独立生成（タグ: {newBall.tag}）: {newBall.name}");
             return newBall;
         }
 

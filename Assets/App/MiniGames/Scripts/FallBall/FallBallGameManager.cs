@@ -186,7 +186,13 @@ namespace MiniGames.FallBall
         /// </summary>
         public void OnBallExit()
         {
-            if (isFinished && !allowContinuousPlay) return;
+            Debug.Log($"FallBallGameManager: OnBallExit呼ばれました. isFinished={isFinished}, allowContinuousPlay={allowContinuousPlay}");
+            
+            if (isFinished && !allowContinuousPlay) 
+            {
+                Debug.Log("FallBallGameManager: ゲーム終了済みのため再補充をスキップします。");
+                return;
+            }
             
             Debug.Log("FallBall: ボール退出検知。1秒後に再出現させます。");
             StartCoroutine(WaitAndSpawnBall());
