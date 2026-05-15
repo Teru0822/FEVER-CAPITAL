@@ -38,6 +38,8 @@ namespace MiniGames.FallBall
 
         private void Start()
         {
+            Debug.Log($"FallBallGameManager Start: ballObject={ballObject != null}, refillController={refillController != null}");
+            
             if (ballObject != null)
             {
                 ballTemplate = ballObject;
@@ -47,7 +49,7 @@ namespace MiniGames.FallBall
                 if (refillController != null)
                 {
                     // RefillController がある場合: 最初のボールはアーム内に表示したまま。
-                    // スペースキーで補充シーケンスが走る。
+                    Debug.Log("FallBallGameManager: RefillController が設定済み。スペースキーで補充シーケンスを実行します。");
                 }
                 else
                 {
@@ -56,12 +58,18 @@ namespace MiniGames.FallBall
                     SpawnNewBall();
                 }
             }
+            else
+            {
+                Debug.LogWarning("FallBallGameManager: ballObject が設定されていません！");
+            }
         }
 
         private void Update()
         {
             if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
             {
+                Debug.Log($"FallBallGameManager: Spaceキー検知! refillController={refillController != null}, IsRefilling={refillController?.IsRefilling}");
+                
                 // 補充アニメーション中は追加スポーンを無効化
                 if (refillController != null && refillController.IsRefilling) return;
                 

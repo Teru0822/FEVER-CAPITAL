@@ -17,9 +17,9 @@ namespace MiniGames.FallBall
         [SerializeField] private Transform leftBar;
         [Tooltip("右側の棒のTransform")]
         [SerializeField] private Transform rightBar;
-        [Tooltip("左側の支柱（ピボット）。設定すると棒の代わりにこちらを回転させます")]
+        [Tooltip("左側の支柱（ピボット）。棒の回転軸として使用（棒が自動的に子になります）")]
         [SerializeField] private Transform leftPivot;
-        [Tooltip("右側の支柱（ピボット）。設定すると棒の代わりにこちらを回転させます")]
+        [Tooltip("右側の支柱（ピボット）。棒の回転軸として使用（棒が自動的に子になります）")]
         [SerializeField] private Transform rightPivot;
         [Tooltip("操作用の半透明のオブジェクト（ハンドルのTransform）")]
         [SerializeField] private Transform operationHandle;
@@ -27,6 +27,10 @@ namespace MiniGames.FallBall
         [Header("Physics Settings")]
         [Tooltip("棒全体の移動を物理的に行うためのRigidbody（IsKinematic推奨）")]
         [SerializeField] private Rigidbody parentRigidbody;
+        [Tooltip("左右エイムの対象。未設定の場合は自身(transform)を回転。全体が回転してしまう場合は専用の親オブジェクトを設定してください")]
+        [SerializeField] private Transform aimTarget;
+        [Tooltip("左右エイムを無効化する場合はチェックを外してください")]
+        [SerializeField] private bool enableYawAim = true;
 
         [Header("Settings (Rotation Aim)")]
         [Tooltip("マウス左右移動による回転（エイム）の感度")]
@@ -176,17 +180,21 @@ namespace MiniGames.FallBall
             if (isDragging)
             {
                 // --- 左右操作（ベース全体の回転：エイム） ---
-                Vector2 mouseDelta = Mouse.current.delta.ReadValue();
-                float yawChange = mouseDelta.x * yawSensitivity;
-                if (invertAimDirection) yawChange = -yawChange;
-                
-                currentYaw += yawChange;
-                currentYaw = Mathf.Clamp(currentYaw, minYaw, maxYaw);
-
-                // もしRigidbodyがない場合は即座に回転（ある場合はFixedUpdateでMoveRotation）
-                if (parentRigidbody == null)
+                if (enableYawAim)
                 {
-                    transform.localRotation = initialRotation * Quaternion.Euler(0, currentYaw, 0);
+                    Vector2 mouseDelta = Mouse.current.delta.ReadValue();
+                    float yawChange = mouseDelta.x * yawSensitivity;
+                    if (invertAimDirection) yawChange = -yawChange;
+                    
+                    currentYaw += yawChange;
+                    currentYaw = Mathf.Clamp(currentYaw, minYaw, maxYaw);
+
+                    // aimTarget が設定されていればそちらを回転、なければ自身を回転
+                    Transform yawTarget = aimTarget != null ? aimTarget : transform;
+                    if (parentRigidbody == null || aimTarget != null)
+                    {
+                        yawTarget.localRotation = initialRotation * Quaternion.Euler(0, currentYaw, 0);
+                    }
                 }
 
                 // --- 縦移動（ハンドルのZ軸移動）の計算 ---
@@ -242,13 +250,11 @@ namespace MiniGames.FallBall
             // ハンドルのローカルX, Yは常に中央(0)などに固定し、Z軸方向（前後）の動きだけに制限する
             operationHandle.localPosition = new Vector3(0, operationHandle.localPosition.y, operationHandle.localPosition.z);
 
-            // Y軸を中心にローカル回転させてV字にする（奥が支点前提）
-            // ピボットが設定されていればピボットを回転、なければ棒を直接回転
+            // Y軸を中心にローカル回転させてV字にする
+            // ピボットが設定されていても、回転するのは常に「棒」（ピボットは位置の基準のみ）
             float finalAngle = invertBarRotation ? -currentAngle : currentAngle;
-            Transform leftTarget = leftPivot != null ? leftPivot : leftBar;
-            Transform rightTarget = rightPivot != null ? rightPivot : rightBar;
-            leftTarget.localRotation = Quaternion.Euler(0, -finalAngle, 0);
-            rightTarget.localRotation = Quaternion.Euler(0, finalAngle, 0);
+            leftBar.localRotation = Quaternion.Euler(0, -finalAngle, 0);
+            rightBar.localRotation = Quaternion.Euler(0, finalAngle, 0);
         }
 
         // ピボット（支点）の位置をエディタ上で可視化する
