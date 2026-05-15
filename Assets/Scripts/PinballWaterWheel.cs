@@ -48,7 +48,7 @@ public class PinballWaterWheel : MonoBehaviour
     [SerializeField] private float angularSpeed = 60f;
 
     [Header("皿の姿勢")]
-    [Tooltip("ON: 皿は常に初期姿勢を維持 (パターノスター式、玉が落ちにくい)\nOFF: 皿はパス接線方向に向く (本物の水車)")]
+    [Tooltip("ON: 皿は常に初期姿勢を維持 (パターノスター式、半円でも姿勢不変、玉が落ちにくい)\nOFF: 皿はパス接線+外向きで向く (水車式、半円を進むと皿も自然に反転する)\n\n皿プレハブの『上面』が local +Y 方向になるように作っておくと OFF 時に正しく外向きになる。")]
     [SerializeField] private bool plateAlwaysUpright = true;
 
     [Header("皿の物理")]
@@ -163,6 +163,8 @@ public class PinballWaterWheel : MonoBehaviour
         float linearSpeed = angularSpeed * Mathf.Deg2Rad * r;
         float dPhase = (linearSpeed * Time.fixedDeltaTime) / Mathf.Max(0.001f, _pathLength);
 
+        Vector3 axisN = rotationAxis.sqrMagnitude > 0.0001f ? rotationAxis.normalized : Vector3.right;
+
         for (int i = 0; i < plates.Length; i++)
         {
             if (plates[i] == null) continue;
@@ -178,12 +180,19 @@ public class PinballWaterWheel : MonoBehaviour
             }
             else
             {
-                // パス接線方向に皿の前方を向ける
+                // パス接線 (Z+) と外向き (Y+) で皿を向ける (水車式: 半円を進むと皿も回転する)
                 Vector3 tangent = ComputeTangent(_phases[i]);
+                // 外向き = rotationAxis × tangent → 直線では perp 方向、半円ではパス中心から外への方向
+                Vector3 outward = Vector3.Cross(axisN, tangent);
+                if (outward.sqrMagnitude < 0.0001f) outward = Vector3.up;
+                else outward = outward.normalized;
+
                 Vector3 worldTangent = transform.TransformDirection(tangent);
-                if (worldTangent.sqrMagnitude > 0.0001f)
+                Vector3 worldOutward = transform.TransformDirection(outward);
+
+                if (worldTangent.sqrMagnitude > 0.0001f && worldOutward.sqrMagnitude > 0.0001f)
                 {
-                    worldRot = Quaternion.LookRotation(worldTangent, transform.up);
+                    worldRot = Quaternion.LookRotation(worldTangent, worldOutward);
                 }
                 else
                 {
