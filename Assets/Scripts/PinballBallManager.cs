@@ -196,6 +196,7 @@ public class PinballBallManager : MonoBehaviour
         if (_configCached) return;
 
         // gen 0 は衝突後に Destroy されるので、永続テンプレートとして非アクティブ複製を保持する
+        // 純物理仕様: Rigidbody / SphereCollider / PinballBallController を残したままクローン
         GameObject src = c.gameObject;
         bool wasActive = src.activeSelf;
         src.SetActive(false);
@@ -203,14 +204,6 @@ public class PinballBallManager : MonoBehaviour
         _ballTemplate.name = "[PinballBallTemplate]";
         _ballTemplate.hideFlags = HideFlags.HideAndDontSave;
         DontDestroyOnLoad(_ballTemplate);
-        // テンプレートから Controller → Rigidbody → Collider の順に即時除去
-        // ([RequireComponent] 制約があるので Controller を先に、かつ DestroyImmediate で同フレームに反映)
-        var tmplCtrl = _ballTemplate.GetComponent<PinballBallController>();
-        if (tmplCtrl != null) DestroyImmediate(tmplCtrl);
-        var tmplRb = _ballTemplate.GetComponent<Rigidbody>();
-        if (tmplRb != null) DestroyImmediate(tmplRb);
-        var tmplCol = _ballTemplate.GetComponent<Collider>();
-        if (tmplCol != null) DestroyImmediate(tmplCol);
         src.SetActive(wasActive);
 
         // pinballRoot に追従するスケール倍率 (root が null なら 1)
@@ -287,51 +280,73 @@ public class PinballBallManager : MonoBehaviour
     }
 
     /// <summary>
-    /// gen 0 Controller から呼ばれる。gen 1 の子ボールを count 個スポーンし、Manager に登録する。
-    /// particleGeneration == 1 ならパーティクルバーストへフォールバック。
+    /// 任意世代のボールが Splitter に当たった時に呼ばれる。子ボール (Rigidbody + Collider 付き) を
+    /// count 個スポーンし、Unity 物理に任せる (NativeList には登録しない)。
+    /// nextGen が particleGeneration 以上なら ParticleBurst にフォールバック。
     /// </summary>
-    public void ProduceGen1Children(PinballBallController source, Vector3 collisionPos, Collider splitterCol, float gen0SphereRadius)
+    public void ProduceChildren(PinballBallController source, int parentGen, Vector3 collisionPos, Collider splitterCol, float parentSphereRadius)
     {
         EnsureConfigured(source);
-        if (!_floorYSet) SetFloorY(collisionPos.y - gen0SphereRadius);
+        if (!_floorYSet) SetFloorY(collisionPos.y - parentSphereRadius);
 
         // 分裂エフェクト (火花 + 効果音)
         if (PinballSplitFXManager.Instance != null) PinballSplitFXManager.Instance.OnSplit(collisionPos);
 
-        int nextGen = 1;
+        int nextGen = parentGen + 1;
         if (_particleGeneration >= 0 && nextGen >= _particleGeneration && _splitParticlePrefab != null)
         {
             SpawnParticleBurst(collisionPos);
             return;
         }
 
-        int splitterIdx = GetSplitterIndex(splitterCol);
         int count = _splitCount;
-        // _maxBallRadius は EnsureConfigured で scaleFactor 倍済み
-        float childRadius = _maxBallRadius;
-        Vector3 childScale = source.transform.localScale * _splitScaleRatio;
-        float xOffset = _spawnXOffset;
+        Vector3 parentLocalScale = source.transform.localScale;
+        Vector3 childScale = parentLocalScale * _splitScaleRatio;
+        // 世代が深くなるほどスポーン左右オフセットも縮小 (親スケールに追従)
+        float xOffset = _spawnXOffset * Mathf.Pow(_splitScaleRatio, parentGen);
 
         for (int i = 0; i < count; i++)
         {
             float t = (count == 1) ? 0f : ((float)i / (count - 1)) * 2f - 1f;
             Vector3 spawnPos = new Vector3(
                 collisionPos.x + xOffset * t,
-                _floorY + childRadius,
+                collisionPos.y,
                 collisionPos.z
             );
             Vector3 vel = new Vector3(_splitSpread * t, 0f, 0f);
-            InstantiateAndRegister(spawnPos, vel, childRadius, nextGen, splitterIdx, childScale);
+            SpawnPhysicsChild(spawnPos, vel, childScale, nextGen, splitterCol);
         }
     }
 
-    void InstantiateAndRegister(Vector3 pos, Vector3 vel, float radius, int generation, int ignoredSplitter, Vector3 localScale)
+    /// <summary>
+    /// 互換用エイリアス: 旧 API (gen 0 から呼ばれる前提) を ProduceChildren へ転送。
+    /// </summary>
+    public void ProduceGen1Children(PinballBallController source, Vector3 collisionPos, Collider splitterCol, float gen0SphereRadius)
+    {
+        ProduceChildren(source, source != null ? source.generation : 0, collisionPos, splitterCol, gen0SphereRadius);
+    }
+
+    /// <summary>テンプレートから RB + Collider + Controller 付きの子ボールを 1 個生成する。NativeList には登録しない。</summary>
+    void SpawnPhysicsChild(Vector3 pos, Vector3 vel, Vector3 localScale, int generation, Collider ignoredSplitter)
     {
         GameObject child = Instantiate(_ballTemplate, pos, Quaternion.identity);
         child.hideFlags = HideFlags.None;
-        child.SetActive(true);
         child.transform.localScale = localScale;
-        Register(child.transform, (float3)(Vector3)pos, (float3)(Vector3)vel, radius, generation, ignoredSplitter);
+        child.SetActive(true);
+
+        var ctrl = child.GetComponent<PinballBallController>();
+        if (ctrl != null) ctrl.generation = generation;
+
+        // 生成元 splitter とは衝突しないよう永続的に Ignore (このボールが destroy されたらペアも消える)
+        var childCol = child.GetComponent<Collider>();
+        if (childCol != null && ignoredSplitter != null)
+            Physics.IgnoreCollision(childCol, ignoredSplitter, true);
+
+        // 初速 (Awake 後の rb を取り直し)
+        var rb = child.GetComponent<Rigidbody>();
+        if (rb != null) rb.linearVelocity = vel;
+
+        _totalGenerated++;
     }
 
     void Register(Transform t, float3 pos, float3 vel, float radius, int generation, int ignoredSplitter)
@@ -655,7 +670,10 @@ public class PinballBallManager : MonoBehaviour
                 parentPos.z
             );
             Vector3 vel = new Vector3(_splitSpread * t, 0f, 0f);
-            InstantiateAndRegister(spawnPos, vel, childRadius, nextGen, hitSplitterIdx, childScale);
+            // 純物理仕様への切替後はこのパスは到達しない (NativeList が空のため) が、
+            // コンパイル維持のため SpawnPhysicsChild にフォワード
+            Collider ignored = (hitSplitterIdx >= 0 && hitSplitterIdx < _splitterCount) ? _splitterColliders[hitSplitterIdx] : null;
+            SpawnPhysicsChild(spawnPos, vel, childScale, nextGen, ignored);
         }
 
         DestroyAt(index);
