@@ -169,17 +169,14 @@ namespace MiniGames.FallBall
         {
             Debug.Log($"FallBallRefill: 補充アニメーション「{refillClip.name}」を開始します");
             
-            // 1. 先にアニメーション（空のアームの動き）を開始
+            // 1. 最初からボールを生成（親子関係なし、物理有効）
+            SpawnBallInArm();
+
+            // 2. アニメーション再生
             legacyAnimation.Play(refillClip.name);
             
-            // 2. アニメーションが「放出ポイント」に来るまで待つ（全長の95%程度）
-            yield return new WaitForSeconds(refillClip.length * 0.95f);
-
-            // 3. 放出ポイントでボールを「独立した状態」で生成
-            GameObject newBall = SpawnBallInArm();
-            
-            // 残りを待機
-            yield return new WaitForSeconds(refillClip.length * 0.05f);
+            // 3. アニメーション完了まで待機
+            yield return new WaitForSeconds(refillClip.length);
             Debug.Log("FallBallRefill: 補充シーケンス完了");
         }
 
@@ -189,16 +186,14 @@ namespace MiniGames.FallBall
         private IEnumerator PlayShapeKeyRefill()
         {
             Debug.Log("FallBallRefill: シェイプキーによる補充を開始します");
+            
+            SpawnBallInArm();
 
-            // 1. アームを下ろす・開く動き（ここではボールなし）
             yield return StartCoroutine(AnimateBlendShape(rodRenderer, rodBlendShapeIndex, 0f, 100f, extendDuration));
             yield return StartCoroutine(AnimateBlendShape(armRenderer, armBlendShapeIndex, 0f, 100f, openDuration));
 
-            // 2. 開ききったタイミングでボールを生成
             yield return new WaitForSeconds(dropDelay);
-            SpawnBallInArm();
-
-            // 3. アームを戻す
+            
             StartCoroutine(AnimateBlendShape(armRenderer, armBlendShapeIndex, 100f, 0f, retractDuration));
             yield return StartCoroutine(AnimateBlendShape(rodRenderer, rodBlendShapeIndex, 100f, 0f, retractDuration));
         }
@@ -207,51 +202,52 @@ namespace MiniGames.FallBall
         {
             if (ballTemplate == null || ballSpawnParent == null) return null;
 
-            // 親を指定せず、放出ポイントの位置に直接生成（最初からはなす）
+            // 親を指定せず、現在のスポーン位置に生成（最初からはなす）
             GameObject newBall = Instantiate(ballTemplate, ballSpawnParent.position, ballSpawnParent.rotation);
             newBall.name = "RefilledBall_" + Time.frameCount;
             
-            // 親がいないのでスケールはテンプレートのものをそのままコピー
             newBall.transform.localScale = ballTemplate.transform.localScale;
-            
             newBall.SetActive(true);
             
             Rigidbody rb = newBall.GetComponent<Rigidbody>();
             if (rb != null)
             {
-                rb.isKinematic = false; // 最初から物理を有効にする
+                rb.isKinematic = false; 
                 rb.linearVelocity = Vector3.zero;
-                rb.angularVelocity = Vector3.zero;
-                Debug.Log($"FallBallRefill: ボールを独立生成しました: {newBall.name} at {newBall.transform.position}");
-            }
-            else
-            {
-                Debug.LogWarning($"FallBallRefill: 生成した {newBall.name} に Rigidbody がありません！");
             }
 
+            // 【重要】串刺し・めり込み防止：アーム側の全コライダーとの衝突を一時的に無視する
+            Collider ballCollider = newBall.GetComponent<Collider>();
+            if (ballCollider != null)
+            {
+                Collider[] armColliders = GetComponentsInChildren<Collider>();
+                foreach (var armCollider in armColliders)
+                {
+                    if (armCollider != ballCollider && !armCollider.isTrigger)
+                    {
+                        Physics.IgnoreCollision(ballCollider, armCollider, true);
+                        // 1.5秒後に衝突判定を元に戻すコルーチン
+                        StartCoroutine(RestoreCollision(ballCollider, armCollider, 1.5f));
+                    }
+                }
+            }
+
+            Debug.Log($"FallBallRefill: ボールを独立生成（衝突無視設定）: {newBall.name}");
             return newBall;
+        }
+
+        private IEnumerator RestoreCollision(Collider c1, Collider c2, float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            if (c1 != null && c2 != null)
+            {
+                Physics.IgnoreCollision(c1, c2, false);
+            }
         }
 
         private void ReleaseBall(GameObject ball)
         {
-            if (ball == null)
-            {
-                Debug.LogWarning("FallBallRefill: 解放するボールがnullです");
-                return;
-            }
-
-            // 強制的にアクティブにする
-            ball.SetActive(true);
-
-            Debug.Log($"FallBallRefill: ボール {ball.name} をアームから切り離し物理演算を開始します (Active={ball.activeSelf})");
-            ball.transform.SetParent(null);
-            Rigidbody rb = ball.GetComponent<Rigidbody>();
-            if (rb != null)
-            {
-                rb.isKinematic = false;
-                rb.linearVelocity = Vector3.zero;
-                rb.angularVelocity = Vector3.zero;
-            }
+            // 最初からはなしているので、ここでは何もしない
         }
 
         private IEnumerator AnimateBlendShape(SkinnedMeshRenderer renderer, int index, float from, float to, float duration)
