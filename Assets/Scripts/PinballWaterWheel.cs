@@ -353,13 +353,41 @@ public class PinballWaterWheel : MonoBehaviour
         return stretchN * (-L / 2f) + r * (-Mathf.Cos(theta2) * perp - Mathf.Sin(theta2) * stretchN);
     }
 
+    /// <summary>
+    /// Stadium パス上 phase の解析的タンジェント (進行方向の単位ベクトル) をローカル空間で返す。
+    /// 数値微分は eps が小さすぎると差分が浮動小数点誤差に埋もれて 0 になるため使わない。
+    /// </summary>
     Vector3 ComputeTangent(float phase01)
     {
-        const float eps = 0.001f;
-        Vector3 a = SampleStadiumPath(Mathf.Repeat(phase01 + eps, 1f));
-        Vector3 b = SampleStadiumPath(Mathf.Repeat(phase01 - eps + 1f, 1f));
-        Vector3 d = a - b;
-        return d.sqrMagnitude > 0.0001f ? d.normalized : Vector3.right;
+        Vector3 stretchN = stretchAxis.sqrMagnitude > 0.0001f ? stretchAxis.normalized : Vector3.up;
+        Vector3 axisN = rotationAxis.sqrMagnitude > 0.0001f ? rotationAxis.normalized : Vector3.right;
+        Vector3 perp = Vector3.Cross(axisN, stretchN);
+        if (perp.sqrMagnitude < 0.0001f) perp = Vector3.right;
+        else perp = perp.normalized;
+
+        float L = stretchLength;
+        float r = Mathf.Max(0.01f, radius);
+        float total = 2f * L + 2f * Mathf.PI * r;
+        float t = Mathf.Repeat(phase01, 1f) * total;
+
+        // 右ストレート (上昇): 位置 = perp*r + stretchN*(-L/2 + t) → 接線 = stretchN
+        if (t < L) return stretchN;
+        t -= L;
+        // 上半円: 位置 = stretchN*(L/2) + r*(cos(θ)*perp + sin(θ)*stretchN), θ = t/r
+        //         接線 = -sin(θ)*perp + cos(θ)*stretchN
+        if (t < Mathf.PI * r)
+        {
+            float theta = t / r;
+            return (-Mathf.Sin(theta) * perp + Mathf.Cos(theta) * stretchN).normalized;
+        }
+        t -= Mathf.PI * r;
+        // 左ストレート (下降): 位置 = -perp*r + stretchN*(L/2 - t) → 接線 = -stretchN
+        if (t < L) return -stretchN;
+        t -= L;
+        // 下半円: 位置 = -stretchN*(L/2) + r*(-cos(θ)*perp - sin(θ)*stretchN), θ = t/r
+        //         接線 = sin(θ)*perp - cos(θ)*stretchN
+        float theta2 = t / r;
+        return (Mathf.Sin(theta2) * perp - Mathf.Cos(theta2) * stretchN).normalized;
     }
 
     void OnDrawGizmosSelected()
