@@ -13,14 +13,10 @@ namespace MiniGames.FallBall
     public class BarController : MonoBehaviour
     {
         [Header("References")]
-        [Tooltip("左側の棒のTransform")]
+        [Tooltip("左側の回転対象。支柱をピボットにする場合は支柱を設定し、棒を支柱の子にしてください")]
         [SerializeField] private Transform leftBar;
-        [Tooltip("右側の棒のTransform")]
+        [Tooltip("右側の回転対象。支柱をピボットにする場合は支柱を設定し、棒を支柱の子にしてください")]
         [SerializeField] private Transform rightBar;
-        [Tooltip("左側の支柱（ピボット）。棒の回転軸として使用（棒が自動的に子になります）")]
-        [SerializeField] private Transform leftPivot;
-        [Tooltip("右側の支柱（ピボット）。棒の回転軸として使用（棒が自動的に子になります）")]
-        [SerializeField] private Transform rightPivot;
         [Tooltip("操作用の半透明のオブジェクト（ハンドルのTransform）")]
         [SerializeField] private Transform operationHandle;
 
@@ -66,10 +62,6 @@ namespace MiniGames.FallBall
         // ドラッグ開始時のベースとマウス位置とのズレを記憶
         private float dragOffsetZ;
 
-        // ピボット方式用: 支柱位置に生成したヘルパーオブジェクト
-        private Transform leftPivotHelper;
-        private Transform rightPivotHelper;
-
         void Start()
         {
             if (Application.isPlaying)
@@ -77,25 +69,6 @@ namespace MiniGames.FallBall
                 if (operationHandle == null)
                 {
                     Debug.LogError("🚨【重要エラー】Inspectorの『Operation Handle』にハンドルがドラッグ＆ドロップされていません！");
-                }
-
-                // ピボットが設定されている場合、支柱位置にヘルパーオブジェクトを生成し、
-                // 棒をその子にする。ヘルパーを回転させると棒が支柱を軸に回転する。
-                if (leftPivot != null && leftBar != null)
-                {
-                    leftPivotHelper = new GameObject("LeftPivotHelper").transform;
-                    leftPivotHelper.SetParent(leftBar.parent, false);
-                    leftPivotHelper.position = leftPivot.position;
-                    leftPivotHelper.rotation = leftBar.parent != null ? leftBar.parent.rotation : Quaternion.identity;
-                    leftBar.SetParent(leftPivotHelper, true); // ワールド位置を保持したまま子にする
-                }
-                if (rightPivot != null && rightBar != null)
-                {
-                    rightPivotHelper = new GameObject("RightPivotHelper").transform;
-                    rightPivotHelper.SetParent(rightBar.parent, false);
-                    rightPivotHelper.position = rightPivot.position;
-                    rightPivotHelper.rotation = rightBar.parent != null ? rightBar.parent.rotation : Quaternion.identity;
-                    rightBar.SetParent(rightPivotHelper, true);
                 }
 
                 if (parentRigidbody == null) parentRigidbody = GetComponent<Rigidbody>();
@@ -263,27 +236,11 @@ namespace MiniGames.FallBall
             // ハンドルのローカルX, Yは常に中央(0)などに固定し、Z軸方向（前後）の動きだけに制限する
             operationHandle.localPosition = new Vector3(0, operationHandle.localPosition.y, operationHandle.localPosition.z);
 
+            // leftBar / rightBar の localRotation を直接設定
+            // 支柱をピボットにしたい場合は、棒を支柱の子にして、ここに支柱を設定する
             float finalAngle = invertBarRotation ? -currentAngle : currentAngle;
-
-            if (leftPivotHelper != null || rightPivotHelper != null)
-            {
-                // ヘルパー方式: 支柱位置に作った空オブジェクトを回転させる
-                // 棒はその子なので、支柱を軸として自然に回転する
-                if (leftPivotHelper != null)
-                {
-                    leftPivotHelper.localRotation = Quaternion.Euler(0, -finalAngle, 0);
-                }
-                if (rightPivotHelper != null)
-                {
-                    rightPivotHelper.localRotation = Quaternion.Euler(0, finalAngle, 0);
-                }
-            }
-            else
-            {
-                // 従来方式: 棒を直接回転
-                leftBar.localRotation = Quaternion.Euler(0, -finalAngle, 0);
-                rightBar.localRotation = Quaternion.Euler(0, finalAngle, 0);
-            }
+            leftBar.localRotation = Quaternion.Euler(0, -finalAngle, 0);
+            rightBar.localRotation = Quaternion.Euler(0, finalAngle, 0);
         }
 
         // ピボット（支点）の位置をエディタ上で可視化する
