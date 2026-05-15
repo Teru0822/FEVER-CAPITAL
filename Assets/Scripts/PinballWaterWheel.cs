@@ -48,8 +48,8 @@ public class PinballWaterWheel : MonoBehaviour
     [SerializeField] private float angularSpeed = 60f;
 
     [Header("皿の姿勢")]
-    [Tooltip("ON: 皿は常に初期姿勢を維持 (パターノスター式、半円でも姿勢不変、玉が落ちにくい)\nOFF: 皿はパス接線+外向きで向く (水車式、半円を進むと皿も自然に反転する)\n\n皿プレハブの『上面』が local +Y 方向になるように作っておくと OFF 時に正しく外向きになる。")]
-    [SerializeField] private bool plateAlwaysUpright = true;
+    [Tooltip("OFF (既定): 皿はパス接線+外向きで向く (水車式、半円を進むと皿も自然に反転する)。設置時の姿勢オフセットは維持される。\nON: 皿は常に初期姿勢を維持 (パターノスター式、半円でも姿勢不変、玉が落ちにくい)")]
+    [SerializeField] private bool plateAlwaysUpright = false;
 
     [Header("皿の物理")]
     [Tooltip("Awake 時に皿 Collider へ高摩擦の PhysicsMaterial を付与 (玉が滑り落ちない)")]
@@ -63,6 +63,8 @@ public class PinballWaterWheel : MonoBehaviour
     // Stadium 用
     private float[] _phases;
     private float _pathLength;
+    // 初期姿勢オフセット (皿の設置回転 = pathRot(初期phase) × offset)
+    private Quaternion[] _pathRotationOffsets;
 
     // 共通
     private Quaternion[] _initialLocalRotations;
@@ -76,13 +78,45 @@ public class PinballWaterWheel : MonoBehaviour
         _initialLocalRotations = new Quaternion[n];
         _plateRigidbodies = new Rigidbody[n];
         _phases = new float[n];
+        _pathRotationOffsets = new Quaternion[n];
+
+        // Stadium 形状用に path length を先に確定 (Awake 序盤で計算)
+        _pathLength = 2f * stretchLength + 2f * Mathf.PI * Mathf.Max(0.01f, radius);
+        Vector3 axisN0 = rotationAxis.sqrMagnitude > 0.0001f ? rotationAxis.normalized : Vector3.right;
 
         for (int i = 0; i < n; i++)
         {
             if (plates[i] == null) continue;
             _initialLocalOffsets[i] = transform.InverseTransformPoint(plates[i].position);
             _initialLocalRotations[i] = Quaternion.Inverse(transform.rotation) * plates[i].rotation;
-            _phases[i] = (float)i / n;
+
+            if (shape == WheelShape.Stadium)
+            {
+                // 初期 phase は「設置位置に最も近いパス上の点」から逆引き
+                _phases[i] = FindClosestPhase(_initialLocalOffsets[i]);
+
+                // 初期姿勢オフセット: pathRot(初期phase) × offset = plates[i].rotation
+                Vector3 t0 = ComputeTangent(_phases[i]);
+                Vector3 o0 = Vector3.Cross(axisN0, t0);
+                if (o0.sqrMagnitude < 0.0001f) o0 = Vector3.up;
+                else o0 = o0.normalized;
+                Vector3 wt0 = transform.TransformDirection(t0);
+                Vector3 wo0 = transform.TransformDirection(o0);
+                if (wt0.sqrMagnitude > 0.0001f && wo0.sqrMagnitude > 0.0001f)
+                {
+                    Quaternion initialPathRot = Quaternion.LookRotation(wt0, wo0);
+                    _pathRotationOffsets[i] = Quaternion.Inverse(initialPathRot) * plates[i].rotation;
+                }
+                else
+                {
+                    _pathRotationOffsets[i] = Quaternion.identity;
+                }
+            }
+            else
+            {
+                _phases[i] = (float)i / n; // Circle モードでは未使用
+                _pathRotationOffsets[i] = Quaternion.identity;
+            }
 
             if (autoAddKinematicRigidbody)
             {
@@ -118,7 +152,26 @@ public class PinballWaterWheel : MonoBehaviour
             }
         }
 
-        _pathLength = 2f * stretchLength + 2f * Mathf.PI * Mathf.Max(0.01f, radius);
+    }
+
+    /// <summary>ローカル座標で渡された点に最も近い path 上の phase (0~1) を返す。</summary>
+    float FindClosestPhase(Vector3 localPos)
+    {
+        const int samples = 360;
+        float bestPhase = 0f;
+        float bestDist = float.MaxValue;
+        for (int i = 0; i < samples; i++)
+        {
+            float p = (float)i / samples;
+            Vector3 pp = SampleStadiumPath(p);
+            float d = (pp - localPos).sqrMagnitude;
+            if (d < bestDist)
+            {
+                bestDist = d;
+                bestPhase = p;
+            }
+        }
+        return bestPhase;
     }
 
     void FixedUpdate()
@@ -192,7 +245,9 @@ public class PinballWaterWheel : MonoBehaviour
 
                 if (worldTangent.sqrMagnitude > 0.0001f && worldOutward.sqrMagnitude > 0.0001f)
                 {
-                    worldRot = Quaternion.LookRotation(worldTangent, worldOutward);
+                    Quaternion pathRot = Quaternion.LookRotation(worldTangent, worldOutward);
+                    // 設置時のオフセットを掛けて、設置時の姿勢関係をパス進行方向に対して維持
+                    worldRot = pathRot * _pathRotationOffsets[i];
                 }
                 else
                 {
