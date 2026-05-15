@@ -216,24 +216,27 @@ namespace MiniGames.FallBall
             if (rb != null)
             {
                 rb.isKinematic = false; 
+                rb.useGravity = true;
                 rb.linearVelocity = Vector3.zero;
+                rb.angularVelocity = Vector3.zero;
+                
+                // 物理演算の安定化設定
+                rb.interpolation = RigidbodyInterpolation.Interpolate; // 動きを滑らかに
+                rb.collisionDetectionMode = CollisionDetectionMode.Continuous; // 突き抜け防止
+                rb.sleepThreshold = 0f; // スリープ（停止）を禁止
+                
+                Debug.Log($"FallBallRefill: ボールを独立生成（物理安定化設定）: {newBall.name}");
             }
 
-            // 【改善】アームの動く部品（自分自身の子要素）とのみ衝突を無視する
+            // 衝突無視の設定を復元
             Collider ballCollider = newBall.GetComponent<Collider>();
             if (ballCollider != null)
             {
-                // 自分（RefillController）の子要素にあるコライダーのみを対象にする
-                // ただし、もしミニゲーム全体が自分自身の子なら、より慎重に「アーム」のルートを指定すべき
                 Collider[] myColliders = GetComponentsInChildren<Collider>();
                 foreach (var otherCollider in myColliders)
                 {
-                    // 自分自身やトリガーは除外、かつ「棒」や「ゴール」を無視しないように注意
-                    // ここでは「アーム」に関連するものだけを無視するように、名前などでフィルタリングするか
-                    // もしくは単純に「アーム」のルートトランスフォームを限定して取得する
                     if (otherCollider != ballCollider && !otherCollider.isTrigger)
                     {
-                        // 念のため、他の重要なコライダー（ゴールなど）を無視しないように
                         if (otherCollider.gameObject.name.Contains("arm") || otherCollider.gameObject.name.Contains("rod"))
                         {
                             Physics.IgnoreCollision(ballCollider, otherCollider, true);
@@ -243,7 +246,6 @@ namespace MiniGames.FallBall
                 }
             }
 
-            Debug.Log($"FallBallRefill: ボールを独立生成（タグ: {newBall.tag}）: {newBall.name}");
             return newBall;
         }
 
