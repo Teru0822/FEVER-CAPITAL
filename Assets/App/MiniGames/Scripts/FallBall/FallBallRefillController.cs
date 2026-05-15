@@ -218,17 +218,23 @@ namespace MiniGames.FallBall
             
             // アームの部品（棒など）と重なりにくいように少し下(Y)にずらす（串刺し防止）
             newBall.transform.localPosition = new Vector3(0, -0.05f, 0);
-            newBall.transform.localScale = ballTemplate.transform.localScale;
+
+            // 重要：親のスケールの影響を完全に打ち消して、ワールド空間での大きさをテンプレートに合わせる
+            Vector3 parentScale = ballSpawnParent.lossyScale;
+            Vector3 templateScale = ballTemplate.transform.localScale;
+            newBall.transform.localScale = new Vector3(
+                templateScale.x / (parentScale.x > 0.0001f ? parentScale.x : 1f),
+                templateScale.y / (parentScale.y > 0.0001f ? parentScale.y : 1f),
+                templateScale.z / (parentScale.z > 0.0001f ? parentScale.z : 1f)
+            );
             
             newBall.SetActive(true);
             
             Rigidbody rb = newBall.GetComponent<Rigidbody>();
             if (rb != null)
             {
-                // 最初から物理演算を有効にする（はなす）
-                rb.isKinematic = false;
-                rb.linearVelocity = Vector3.zero;
-                Debug.Log($"FallBallRefill: ボール生成完了: {newBall.name} (独立生成)");
+                rb.isKinematic = true; // 運んでいる間は物理無効
+                Debug.Log($"FallBallRefill: ボール生成完了: {newBall.name}, WorldScale={newBall.transform.lossyScale}");
             }
             else
             {
