@@ -144,6 +144,30 @@ public class PinballBallConfig : MonoBehaviour
     [Tooltip("1 フレームあたりの最大火花生成数 (0 で無制限)")]
     public int maxSparksPerFrame = 12;
 
+    [Header("ボール衝突 SFX (壁・床等)")]
+    [Tooltip("ボールが壁/床/消費済ピン等に衝突したときに鳴らす音 (コツン)")]
+    public AudioClip wallImpactSfxClip;
+
+    [Range(0f, 1f)]
+    [Tooltip("基本音量 (実際は衝突速度に応じて 0~この値 に減衰)")]
+    public float wallImpactSfxVolume = 0.5f;
+
+    [Range(0f, 0.5f)]
+    [Tooltip("ピッチ変動 ±幅 (0 で固定)")]
+    public float wallImpactPitchVariance = 0.1f;
+
+    [Tooltip("この相対速度未満の衝突は鳴らさない (微小衝突カット)")]
+    [Min(0f)]
+    public float wallImpactMinSpeed = 0.5f;
+
+    [Tooltip("この速度で音量最大に到達 (m/s)。超えても音量は飽和")]
+    [Min(0.01f)]
+    public float wallImpactReferenceSpeed = 5f;
+
+    [Min(0)]
+    [Tooltip("1 フレームあたりの最大衝突 SFX 数 (0 で無制限)")]
+    public int maxImpactSfxPerFrame = 4;
+
     [Header("リセット")]
     [Tooltip("このキーを押すと現在のシーンを再ロードしてゲームを初期化する")]
     public KeyCode resetKey = KeyCode.R;
