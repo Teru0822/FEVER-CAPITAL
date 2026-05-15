@@ -79,15 +79,16 @@ namespace MiniGames.FallBall
 
         private void SpawnNewBall()
         {
-            if (ballTemplate == null) return;
-
             // RefillController が設定されている場合はアニメーション付きで補充
+            // (RefillController は自身の ballTemplate を持つので GameManager の ballTemplate は不要)
             if (refillController != null)
             {
                 StartCoroutine(refillController.PlayRefillSequence());
                 Debug.Log("FallBall: 補充アニメーションを開始しました");
                 return;
             }
+            
+            if (ballTemplate == null) return;
             
             // RefillController が未設定の場合は従来のシンプルなスポーン
             GameObject newBall = Instantiate(ballTemplate, initialBallPosition, initialBallRotation);

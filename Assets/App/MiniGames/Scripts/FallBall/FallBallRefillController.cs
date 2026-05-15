@@ -69,14 +69,14 @@ namespace MiniGames.FallBall
             if (rodRenderer != null)
             {
                 LogBlendShapeNames(rodRenderer, "昇降棒");
-                rodBlendShapeIndex = FindBlendShapeIndex(rodRenderer, "キー１");
+                rodBlendShapeIndex = FindBlendShapeIndex(rodRenderer, "キー 1");
                 Debug.Log($"FallBallRefill: 昇降棒シェイプキー index={rodBlendShapeIndex}");
                 if (rodBlendShapeIndex < 0) rodBlendShapeIndex = 0;
             }
             if (armRenderer != null)
             {
                 LogBlendShapeNames(armRenderer, "アーム");
-                armBlendShapeIndex = FindBlendShapeIndex(armRenderer, "キー１");
+                armBlendShapeIndex = FindBlendShapeIndex(armRenderer, "キー 1");
                 Debug.Log($"FallBallRefill: アームシェイプキー index={armBlendShapeIndex}");
                 if (armBlendShapeIndex < 0) armBlendShapeIndex = 0;
             }
