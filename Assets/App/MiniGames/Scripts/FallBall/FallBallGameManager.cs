@@ -48,12 +48,11 @@ namespace MiniGames.FallBall
                 
                 if (refillController != null)
                 {
-                    // RefillController がある場合: 最初のボールはアーム内に表示したまま。
-                    Debug.Log("FallBallGameManager: RefillController が設定済み。スペースキーで補充シーケンスを実行します。");
+                    Debug.Log("FallBallGameManager: 起動時の自動補充を開始します。");
+                    SpawnNewBall();
                 }
                 else
                 {
-                    // RefillController がない場合: 従来の動作（テンプレート化してスポーン）
                     ballTemplate.SetActive(false);
                     SpawnNewBall();
                 }

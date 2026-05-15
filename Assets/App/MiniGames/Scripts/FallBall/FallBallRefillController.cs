@@ -222,26 +222,22 @@ namespace MiniGames.FallBall
                 ballTemplate.SetActive(false);
             }
 
-            // 親を指定して生成
-            GameObject newBall = Instantiate(ballTemplate, ballSpawnParent.position, ballSpawnParent.rotation, ballSpawnParent);
+            // 親を指定せずワールドに直接生成（最初からはなす）
+            GameObject newBall = Instantiate(ballTemplate, ballSpawnParent.position, ballSpawnParent.rotation);
             newBall.name = "RefilledBall_" + Time.frameCount;
             
-            // 重要：親のスケールの影響を完全に打ち消して、ワールドスケールを1(またはテンプレートと同じ)にする
-            Vector3 parentScale = ballSpawnParent.lossyScale;
-            Vector3 templateScale = ballTemplate.transform.localScale;
-            newBall.transform.localScale = new Vector3(
-                templateScale.x / (parentScale.x > 0 ? parentScale.x : 1f),
-                templateScale.y / (parentScale.y > 0 ? parentScale.y : 1f),
-                templateScale.z / (parentScale.z > 0 ? parentScale.z : 1f)
-            );
+            // スケールをテンプレートに合わせる（親がいないので単純コピーでOK）
+            newBall.transform.localScale = ballTemplate.transform.localScale;
             
             newBall.SetActive(true);
             
             Rigidbody rb = newBall.GetComponent<Rigidbody>();
             if (rb != null)
             {
-                rb.isKinematic = true;
-                Debug.Log($"FallBallRefill: ボール生成完了: {newBall.name}, Scale={newBall.transform.localScale}");
+                // 最初から物理演算を有効にする（はなす）
+                rb.isKinematic = false;
+                rb.linearVelocity = Vector3.zero;
+                Debug.Log($"FallBallRefill: ボール生成完了: {newBall.name} (独立生成)");
             }
             else
             {
