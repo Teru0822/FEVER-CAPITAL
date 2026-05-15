@@ -62,6 +62,11 @@ public class PinballWaterWheel : MonoBehaviour
     [Tooltip("Awake で設定内容を Console に出力する")]
     [SerializeField] private bool logSettingsOnAwake = false;
 
+    [Tooltip("Update のたびに plate[0] の phase / worldRot 等を Console に出力 (回転していない原因切り分け用)")]
+    [SerializeField] private bool logPlate0EachFrame = false;
+
+    private float _logTimer = 0f;
+
     // --- 内部状態 ---
     // Circle 用
     private Vector3[] _initialLocalOffsets;
@@ -271,6 +276,17 @@ public class PinballWaterWheel : MonoBehaviour
             }
 
             ApplyToPlate(i, worldPos, worldRot);
+
+            // Debug log (plate0 のみ 0.5 秒間隔)
+            if (logPlate0EachFrame && i == 0)
+            {
+                _logTimer += Time.fixedDeltaTime;
+                if (_logTimer >= 0.5f)
+                {
+                    _logTimer = 0f;
+                    Debug.Log($"[WaterWheel] plate0 phase={_phases[0]:F3} alwaysUpright={plateAlwaysUpright} worldRotEuler={worldRot.eulerAngles}", this);
+                }
+            }
         }
     }
 
