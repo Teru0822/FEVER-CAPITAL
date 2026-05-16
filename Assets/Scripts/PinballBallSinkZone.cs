@@ -25,17 +25,8 @@ public class PinballBallSinkZone : MonoBehaviour
     [Tooltip("消滅 VFX の自動破棄時間 (秒)。0 以下で無効")]
     [SerializeField] private float onSinkVFXLifetime = 2f;
 
-    [Header("消滅時 SFX (任意 / コロンコロン用)")]
-    [Tooltip("ボールがゾーンに入った時に鳴らす音 (コロンコロン)。null なら無音")]
-    [SerializeField] private AudioClip onSinkSfxClip;
-
-    [Range(0f, 1f)]
-    [Tooltip("音量")]
-    [SerializeField] private float onSinkSfxVolume = 0.6f;
-
-    [Range(0f, 0.5f)]
-    [Tooltip("ピッチ揺らぎ ±幅 (コロンコロンの自然なバリエーションに)")]
-    [SerializeField] private float onSinkSfxPitchVariance = 0.2f;
+    // 消滅 SFX (コロンコロン等) は PinballBottleSFXZone に分離。
+    // 必要な場合は同じ GameObject に PinballBottleSFXZone を併設すること。
 
     [Header("適用対象")]
     [Tooltip("対象タグ (空なら PinballBallController を持つ全衝突物)")]
@@ -49,21 +40,12 @@ public class PinballBallSinkZone : MonoBehaviour
     [Tooltip("現在の PartsBallCount (Inspector 確認用、静的カウンタの読み取り)")]
     [SerializeField] private int debugPartsBallCount;
 
-    private AudioSource _sinkAudioSource;
-
     void Awake()
     {
         if (forceTriggerOnAwake)
         {
             var col = GetComponent<Collider>();
             if (col != null && !col.isTrigger) col.isTrigger = true;
-        }
-
-        if (onSinkSfxClip != null)
-        {
-            _sinkAudioSource = gameObject.AddComponent<AudioSource>();
-            _sinkAudioSource.playOnAwake = false;
-            _sinkAudioSource.spatialBlend = 0f;
         }
     }
 
@@ -86,13 +68,6 @@ public class PinballBallSinkZone : MonoBehaviour
         {
             var vfx = Instantiate(onSinkVFXPrefab, rb.transform.position, onSinkVFXPrefab.transform.rotation);
             if (onSinkVFXLifetime > 0f) Destroy(vfx, onSinkVFXLifetime);
-        }
-
-        if (_sinkAudioSource != null && onSinkSfxClip != null)
-        {
-            float v = onSinkSfxPitchVariance;
-            _sinkAudioSource.pitch = (v > 0f) ? 1f + Random.Range(-v, v) : 1f;
-            _sinkAudioSource.PlayOneShot(onSinkSfxClip, onSinkSfxVolume);
         }
 
         Destroy(rb.gameObject);
