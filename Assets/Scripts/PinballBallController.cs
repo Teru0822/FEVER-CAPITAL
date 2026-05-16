@@ -119,18 +119,11 @@ public class PinballBallController : MonoBehaviour
     [HideInInspector] public int onConveyorCount = 0;
     public bool IsOnConveyor => onConveyorCount > 0;
 
-    [Header("転がり音")]
-    [Tooltip("PinballSurfaceSFX を持つ床/壁との接触中、その rollLoopClip をループ再生する")]
-    public bool enableRollSound = true;
-
     private bool _isSplitting = false;
 
     private Rigidbody rb;
     private SphereCollider sphereCol;
     private PinballBallConfig _config;
-    private AudioSource _rollAudioSource;
-    private PinballSurfaceSFX _currentRollSurface;
-    private bool _stayedOnSurfaceThisFrame = false;
     // pinballRoot でスケール追従する時は Unity 重力を切って手動で Y/Z 双方に scaled gravity を掛ける
     private bool _useManualGravity = false;
 
@@ -221,7 +214,8 @@ public class PinballBallController : MonoBehaviour
     {
         if (_isSplitting) return;
 
-        // PinballPin (Enforce / Split) を最優先でハンドル
+        // PinballPin (Enforce / Split) を最優先でハンドル。
+        // 衝突 SFX / 転がり SFX は BallSurfaceAudio 側で SurfaceTag を見て処理する。
         var pin = collision.collider.GetComponent<PinballPin>();
         if (pin == null) pin = collision.collider.GetComponentInParent<PinballPin>();
         if (pin != null && !pin.IsConsumed)
@@ -231,12 +225,11 @@ public class PinballBallController : MonoBehaviour
                 case PinballPin.PinType.Enforce:
                     pin.TryConsume();
                     EnforceLevelUp();
-                    PlayImpactSfx(collision); // Enforce 接触も「コツン」で鳴らす
                     return;
                 case PinballPin.PinType.Split:
                     pin.TryConsume();
                     BeginSplit(collision);
-                    return; // 分裂時は分裂音優先 (impact SFX は鳴らさない)
+                    return;
             }
         }
 
@@ -245,81 +238,6 @@ public class PinballBallController : MonoBehaviour
         {
             BeginSplit(collision);
             return;
-        }
-
-        // 上記いずれにも該当しない通常衝突 (壁/床/消費済ピン等) → 衝突 SFX
-        PlayImpactSfx(collision);
-    }
-
-    void OnCollisionStay(Collision collision)
-    {
-        if (!enableRollSound) return;
-        var surface = collision.collider.GetComponent<PinballSurfaceSFX>()
-                      ?? collision.collider.GetComponentInParent<PinballSurfaceSFX>();
-        if (surface == null || surface.rollLoopClip == null) return;
-        UpdateRollAudio(surface);
-        _stayedOnSurfaceThisFrame = true;
-    }
-
-    void LateUpdate()
-    {
-        // この frame でサーフェスに接触していなかったら転がり音を停止
-        if (!_stayedOnSurfaceThisFrame && _rollAudioSource != null && _rollAudioSource.isPlaying)
-        {
-            _rollAudioSource.Stop();
-            _currentRollSurface = null;
-        }
-        _stayedOnSurfaceThisFrame = false;
-    }
-
-    void UpdateRollAudio(PinballSurfaceSFX surface)
-    {
-        if (_rollAudioSource == null)
-        {
-            _rollAudioSource = gameObject.AddComponent<AudioSource>();
-            _rollAudioSource.playOnAwake = false;
-            _rollAudioSource.loop = true;
-            _rollAudioSource.spatialBlend = 0f;
-        }
-        if (_currentRollSurface != surface)
-        {
-            _currentRollSurface = surface;
-            _rollAudioSource.clip = surface.rollLoopClip;
-            if (!_rollAudioSource.isPlaying) _rollAudioSource.Play();
-        }
-        // 速度に応じて音量・ピッチ
-        float speed = rb != null ? rb.linearVelocity.magnitude : 0f;
-        float refSpeed = Mathf.Max(0.01f, surface.rollReferenceSpeed - surface.rollMinSpeedForVolume);
-        float volScale = Mathf.Clamp01((speed - surface.rollMinSpeedForVolume) / refSpeed);
-        _rollAudioSource.volume = surface.rollMaxVolume * volScale;
-        _rollAudioSource.pitch = Mathf.Lerp(surface.rollMinPitch, surface.rollMaxPitch, volScale);
-    }
-
-    void PlayImpactSfx(Collision collision)
-    {
-        if (PinballSplitFXManager.Instance == null) return;
-        Vector3 hitPos = collision.contactCount > 0
-            ? collision.GetContact(0).point
-            : transform.position;
-        float impactSpeed = collision.relativeVelocity.magnitude;
-
-        // サーフェス毎の音があればそれを優先、無ければグローバル既定にフォールバック
-        var surface = collision.collider.GetComponent<PinballSurfaceSFX>()
-                      ?? collision.collider.GetComponentInParent<PinballSurfaceSFX>();
-        if (surface != null && surface.impactClip != null)
-        {
-            if (impactSpeed < surface.impactMinSpeed) return;
-            PinballSplitFXManager.Instance.PlayPooledOneShot(
-                hitPos,
-                surface.impactClip,
-                surface.impactVolume,
-                surface.impactPitchVariance,
-                impactSpeed,
-                surface.impactReferenceSpeed);
-        }
-        else
-        {
-            PinballSplitFXManager.Instance.OnImpact(hitPos, impactSpeed);
         }
     }
 
