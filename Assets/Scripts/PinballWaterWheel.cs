@@ -48,6 +48,30 @@ public class PinballWaterWheel : MonoBehaviour
     [Min(0)]
     [SerializeField] private int autoSpawnPlateCount = 0;
 
+    [Header("キャタピラ (オプション)")]
+    [Tooltip("手動配置用キャタピラ Transform 群。下の Prefab + Count を指定すると自動配置に切替")]
+    [SerializeField] private Transform[] caterpillarPlates;
+
+    [Tooltip("キャタピラ用プレハブ")]
+    [SerializeField] private GameObject caterpillarPrefab;
+
+    [Tooltip("自動スポーンするキャタピラの数 (0 = 自動スポーン無効、手動を使用)")]
+    [Min(0)]
+    [SerializeField] private int autoSpawnCaterpillarCount = 0;
+
+    [Tooltip("キャタピラが回る軌道の半径オフセット (マイナスで内側)")]
+    [SerializeField] private float caterpillarRadiusOffset = -0.05f;
+
+    [Header("装飾 (歯車など)")]
+    [Tooltip("上部の回転中心に配置・回転させるオブジェクト")]
+    [SerializeField] private Transform topGear;
+
+    [Tooltip("下部の回転中心に配置・回転させるオブジェクト")]
+    [SerializeField] private Transform bottomGear;
+
+    [Tooltip("歯車の回転速度の倍率 (1.0でベルトと同じ速さ、マイナスで逆回転)")]
+    [SerializeField] private float gearSpeedMultiplier = 1.0f;
+
     [Header("回転軸・速度")]
     [Tooltip("回転軸 (このオブジェクトのローカル空間)")]
     [SerializeField] private Vector3 rotationAxis = Vector3.right;
@@ -99,17 +123,25 @@ public class PinballWaterWheel : MonoBehaviour
     // --- 内部状態 ---
     // Circle 用
     private Vector3[] _initialLocalOffsets;
+    private Vector3[] _caterpillarInitialOffsets;
     private float _currentAngle = 0f;
 
     // Stadium 用
     private float[] _phases;
+    private float[] _caterpillarPhases;
     private float _pathLength;
+    private float _caterpillarPathLength;
+    
     // 初期姿勢オフセット (皿の設置回転 = pathRot(初期phase) × offset)
     private Quaternion[] _pathRotationOffsets;
+    private Quaternion[] _caterpillarPathRotationOffsets;
 
     // 共通
     private Quaternion[] _initialLocalRotations;
+    private Quaternion[] _caterpillarInitialRotations;
+    
     private Rigidbody[] _plateRigidbodies;
+    private Rigidbody[] _caterpillarRigidbodies;
 
     // カタカタ揺れ + SFX
     private float _currentWobbleAngle = 0f;
@@ -131,80 +163,120 @@ public class PinballWaterWheel : MonoBehaviour
             _rattleAudioSource.spatialBlend = 0f; // 2D 再生
         }
 
-        // 自動スポーン: プレハブが指定されていれば等間隔配置
+        Vector3 axisN0 = rotationAxis.sqrMagnitude > 0.0001f ? rotationAxis.normalized : Vector3.right;
+        Vector3 stretchN = stretchAxis.sqrMagnitude > 0.0001f ? stretchAxis.normalized : Vector3.up;
+
+        // 装飾(歯車)の初期配置
+        if (topGear != null)
+        {
+            if (!topGear.gameObject.scene.IsValid())
+            {
+                topGear = Instantiate(topGear, transform);
+            }
+            topGear.localPosition = (shape == WheelShape.Stadium) ? stretchN * (stretchLength / 2f) : Vector3.zero;
+        }
+        if (bottomGear != null)
+        {
+            if (!bottomGear.gameObject.scene.IsValid())
+            {
+                bottomGear = Instantiate(bottomGear, transform);
+            }
+            bottomGear.localPosition = (shape == WheelShape.Stadium) ? -stretchN * (stretchLength / 2f) : Vector3.zero;
+        }
+
+        // 自動スポーン
         if (platePrefab != null && autoSpawnPlateCount > 0)
         {
             AutoSpawnPlates();
         }
+        if (caterpillarPrefab != null && autoSpawnCaterpillarCount > 0)
+        {
+            AutoSpawnCaterpillars();
+        }
+
+        // 初期化処理
+        _pathLength = 2f * stretchLength + 2f * Mathf.PI * Mathf.Max(0.01f, radius);
+        _caterpillarPathLength = 2f * stretchLength + 2f * Mathf.PI * Mathf.Max(0.01f, radius + caterpillarRadiusOffset);
 
         if (plates == null || plates.Length == 0)
         {
             Debug.LogWarning("[PinballWaterWheel] plates 配列が空です。手動配置するか Plate Prefab + Auto Spawn Plate Count を設定してください。", this);
+        }
+
+        InitPlates(plates, radius, out _initialLocalOffsets, out _initialLocalRotations, out _plateRigidbodies, out _phases, out _pathRotationOffsets);
+        InitPlates(caterpillarPlates, radius + caterpillarRadiusOffset, out _caterpillarInitialOffsets, out _caterpillarInitialRotations, out _caterpillarRigidbodies, out _caterpillarPhases, out _caterpillarPathRotationOffsets);
+    }
+
+    void InitPlates(Transform[] targetPlates, float currentRadius, 
+        out Vector3[] initOffsets, out Quaternion[] initRots, out Rigidbody[] rbs, 
+        out float[] phasesOut, out Quaternion[] pathRotOffsetsOut)
+    {
+        if (targetPlates == null || targetPlates.Length == 0)
+        {
+            initOffsets = null; initRots = null; rbs = null; phasesOut = null; pathRotOffsetsOut = null;
             return;
         }
-        int n = plates.Length;
-        _initialLocalOffsets = new Vector3[n];
-        _initialLocalRotations = new Quaternion[n];
-        _plateRigidbodies = new Rigidbody[n];
-        _phases = new float[n];
-        _pathRotationOffsets = new Quaternion[n];
 
-        // Stadium 形状用に path length を先に確定 (Awake 序盤で計算)
-        _pathLength = 2f * stretchLength + 2f * Mathf.PI * Mathf.Max(0.01f, radius);
+        int n = targetPlates.Length;
+        initOffsets = new Vector3[n];
+        initRots = new Quaternion[n];
+        rbs = new Rigidbody[n];
+        phasesOut = new float[n];
+        pathRotOffsetsOut = new Quaternion[n];
+
         Vector3 axisN0 = rotationAxis.sqrMagnitude > 0.0001f ? rotationAxis.normalized : Vector3.right;
 
         for (int i = 0; i < n; i++)
         {
-            if (plates[i] == null) continue;
-            _initialLocalOffsets[i] = transform.InverseTransformPoint(plates[i].position);
-            _initialLocalRotations[i] = Quaternion.Inverse(transform.rotation) * plates[i].rotation;
+            if (targetPlates[i] == null) continue;
+            initOffsets[i] = transform.InverseTransformPoint(targetPlates[i].position);
+            initRots[i] = Quaternion.Inverse(transform.rotation) * targetPlates[i].rotation;
 
             if (shape == WheelShape.Stadium)
             {
-                // 初期 phase は「設置位置に最も近いパス上の点」から逆引き
-                _phases[i] = FindClosestPhase(_initialLocalOffsets[i]);
+                phasesOut[i] = FindClosestPhase(initOffsets[i], currentRadius);
 
-                // 初期姿勢オフセット: pathRot(初期phase) × offset = plates[i].rotation
-                Vector3 t0 = ComputeTangent(_phases[i]);
+                Vector3 t0 = ComputeTangent(phasesOut[i], currentRadius);
                 Vector3 o0 = Vector3.Cross(axisN0, t0);
                 if (o0.sqrMagnitude < 0.0001f) o0 = Vector3.up;
                 else o0 = o0.normalized;
+
                 Vector3 wt0 = transform.TransformDirection(t0);
                 Vector3 wo0 = transform.TransformDirection(o0);
                 if (wt0.sqrMagnitude > 0.0001f && wo0.sqrMagnitude > 0.0001f)
                 {
                     Quaternion initialPathRot = Quaternion.LookRotation(wt0, wo0);
-                    _pathRotationOffsets[i] = Quaternion.Inverse(initialPathRot) * plates[i].rotation;
+                    pathRotOffsetsOut[i] = Quaternion.Inverse(initialPathRot) * targetPlates[i].rotation;
                 }
                 else
                 {
-                    _pathRotationOffsets[i] = Quaternion.identity;
+                    pathRotOffsetsOut[i] = Quaternion.identity;
                 }
             }
             else
             {
-                _phases[i] = (float)i / n; // Circle モードでは未使用
-                _pathRotationOffsets[i] = Quaternion.identity;
+                phasesOut[i] = (float)i / n;
+                pathRotOffsetsOut[i] = Quaternion.identity;
             }
 
             if (autoAddKinematicRigidbody)
             {
-                var rb = plates[i].GetComponent<Rigidbody>();
-                if (rb == null) rb = plates[i].gameObject.AddComponent<Rigidbody>();
+                var rb = targetPlates[i].GetComponent<Rigidbody>();
+                if (rb == null) rb = targetPlates[i].gameObject.AddComponent<Rigidbody>();
                 rb.isKinematic = true;
                 rb.useGravity = false;
                 rb.interpolation = RigidbodyInterpolation.Interpolate;
                 rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
-                _plateRigidbodies[i] = rb;
+                rbs[i] = rb;
             }
             else
             {
-                _plateRigidbodies[i] = plates[i].GetComponent<Rigidbody>();
+                rbs[i] = targetPlates[i].GetComponent<Rigidbody>();
             }
 
             if (autoApplyHighFrictionMaterial)
             {
-                foreach (var col in plates[i].GetComponentsInChildren<Collider>())
+                foreach (var col in targetPlates[i].GetComponentsInChildren<Collider>())
                 {
                     if (col.sharedMaterial == null)
                     {
@@ -220,32 +292,36 @@ public class PinballWaterWheel : MonoBehaviour
                 }
             }
         }
-
     }
 
-    /// <summary>
-    /// platePrefab を autoSpawnPlateCount 個 instantiate し、パス上に等間隔配置する。
-    /// 各皿の初期 rotation も path tangent + outward に合わせて正しく設定する。
-    /// </summary>
     void AutoSpawnPlates()
     {
         plates = new Transform[autoSpawnPlateCount];
+        SpawnAndSetupArray(autoSpawnPlateCount, platePrefab, plates, radius);
+    }
+    
+    void AutoSpawnCaterpillars()
+    {
+        caterpillarPlates = new Transform[autoSpawnCaterpillarCount];
+        SpawnAndSetupArray(autoSpawnCaterpillarCount, caterpillarPrefab, caterpillarPlates, radius + caterpillarRadiusOffset);
+    }
+
+    void SpawnAndSetupArray(int count, GameObject prefab, Transform[] outputArray, float currentRadius)
+    {
         Vector3 axisN = rotationAxis.sqrMagnitude > 0.0001f ? rotationAxis.normalized : Vector3.right;
-        Quaternion prefabRot = platePrefab.transform.rotation;
+        Quaternion prefabRot = prefab.transform.rotation;
 
-        for (int i = 0; i < autoSpawnPlateCount; i++)
+        for (int i = 0; i < count; i++)
         {
-            float phase = (float)i / autoSpawnPlateCount;
+            float phase = (float)i / count;
 
-            GameObject go = Instantiate(platePrefab, transform);
-            go.name = $"{platePrefab.name}_{i}";
-            plates[i] = go.transform;
+            GameObject go = Instantiate(prefab, transform);
+            go.name = $"{prefab.name}_{i}";
+            outputArray[i] = go.transform;
 
-            // 等間隔配置: パス上の phase 位置 (Stadium / Circle 両対応; Circle は L=0 で同式)
-            Vector3 localPos = SampleStadiumPath(phase);
-            plates[i].position = transform.TransformPoint(localPos);
+            Vector3 localPos = SampleStadiumPath(phase, currentRadius);
+            outputArray[i].position = transform.TransformPoint(localPos);
 
-            // 初期回転: 水車式なら path 由来 × プレハブ姿勢、パターノスター式なら wheel × プレハブ姿勢
             Quaternion initialRot;
             if (plateAlwaysUpright)
             {
@@ -253,17 +329,16 @@ public class PinballWaterWheel : MonoBehaviour
             }
             else
             {
-                Quaternion pathRot = ComputePathRotationWorld(phase, axisN);
+                Quaternion pathRot = ComputePathRotationWorld(phase, axisN, currentRadius);
                 initialRot = pathRot * prefabRot;
             }
-            plates[i].rotation = initialRot;
+            outputArray[i].rotation = initialRot;
         }
     }
 
-    /// <summary>phase 位置における path 由来の world rotation (LookRotation(tangent, outward))</summary>
-    Quaternion ComputePathRotationWorld(float phase, Vector3 axisN)
+    Quaternion ComputePathRotationWorld(float phase, Vector3 axisN, float currentRadius)
     {
-        Vector3 tangent = ComputeTangent(phase);
+        Vector3 tangent = ComputeTangent(phase, currentRadius);
         Vector3 outward = Vector3.Cross(axisN, tangent);
         if (outward.sqrMagnitude < 0.0001f) outward = Vector3.up;
         else outward = outward.normalized;
@@ -278,8 +353,7 @@ public class PinballWaterWheel : MonoBehaviour
         return Quaternion.identity;
     }
 
-    /// <summary>ローカル座標で渡された点に最も近い path 上の phase (0~1) を返す。</summary>
-    float FindClosestPhase(Vector3 localPos)
+    float FindClosestPhase(Vector3 localPos, float currentRadius)
     {
         const int samples = 360;
         float bestPhase = 0f;
@@ -287,7 +361,7 @@ public class PinballWaterWheel : MonoBehaviour
         for (int i = 0; i < samples; i++)
         {
             float p = (float)i / samples;
-            Vector3 pp = SampleStadiumPath(p);
+            Vector3 pp = SampleStadiumPath(p, currentRadius);
             float d = (pp - localPos).sqrMagnitude;
             if (d < bestDist)
             {
@@ -300,7 +374,6 @@ public class PinballWaterWheel : MonoBehaviour
 
     void FixedUpdate()
     {
-        if (plates == null || plates.Length == 0) return;
         if (rotationAxis.sqrMagnitude < 0.0001f) return;
 
         if (shape == WheelShape.Circle)
@@ -315,7 +388,7 @@ public class PinballWaterWheel : MonoBehaviour
 
     void Update()
     {
-        // カタカタ揺れ: Y軸まわりに小さなランダム振動を追加 (主回転とは別レイヤ)
+        // カタカタ揺れ
         if (rattleAmplitudeDegrees > 0f)
         {
             float t = Time.time * rattleFrequency;
@@ -325,7 +398,7 @@ public class PinballWaterWheel : MonoBehaviour
             _currentWobbleAngle = targetWobble;
         }
 
-        // カタカタ SFX: 一定間隔で「カタッ」を鳴らす
+        // カタカタ SFX
         if (_rattleAudioSource != null && rattleSfxClip != null && rattleSfxInterval > 0f)
         {
             _rattleSfxTimer += Time.deltaTime;
@@ -344,48 +417,64 @@ public class PinballWaterWheel : MonoBehaviour
         _currentAngle += angularSpeed * Time.fixedDeltaTime;
         Quaternion totalRot = Quaternion.AngleAxis(_currentAngle, rotationAxis.normalized);
 
-        for (int i = 0; i < plates.Length; i++)
+        UpdateCircleArray(plates, _initialLocalOffsets, _initialLocalRotations, _plateRigidbodies, totalRot);
+        UpdateCircleArray(caterpillarPlates, _caterpillarInitialOffsets, _caterpillarInitialRotations, _caterpillarRigidbodies, totalRot);
+        
+        UpdateGears();
+    }
+    
+    void UpdateCircleArray(Transform[] array, Vector3[] initOffsets, Quaternion[] initRots, Rigidbody[] rbs, Quaternion totalRot)
+    {
+        if (array == null) return;
+        for (int i = 0; i < array.Length; i++)
         {
-            if (plates[i] == null) continue;
-            Vector3 localPos = totalRot * _initialLocalOffsets[i];
+            if (array[i] == null) continue;
+            Vector3 localPos = totalRot * initOffsets[i];
             Vector3 worldPos = transform.TransformPoint(localPos);
 
             Quaternion localRot = plateAlwaysUpright
-                ? _initialLocalRotations[i]
-                : totalRot * _initialLocalRotations[i];
+                ? initRots[i]
+                : totalRot * initRots[i];
             Quaternion worldRot = transform.rotation * localRot;
 
-            ApplyToPlate(i, worldPos, worldRot);
+            ApplyToPlate(array[i], rbs[i], worldPos, worldRot);
         }
     }
 
     void FixedUpdateStadium()
     {
-        // angularSpeed (deg/s) をリム上の線速度 (m/s) に換算
-        float r = Mathf.Max(0.01f, radius);
+        UpdateStadiumArray(plates, radius, _pathLength, _phases, _initialLocalRotations, _pathRotationOffsets, _plateRigidbodies, true);
+        UpdateStadiumArray(caterpillarPlates, radius + caterpillarRadiusOffset, _caterpillarPathLength, _caterpillarPhases, _caterpillarInitialRotations, _caterpillarPathRotationOffsets, _caterpillarRigidbodies, false);
+
+        UpdateGears();
+    }
+
+    void UpdateStadiumArray(Transform[] array, float currentRadius, float pathLen, float[] phasesArray, Quaternion[] initRots, Quaternion[] pathRotOffsets, Rigidbody[] rbs, bool logFirst)
+    {
+        if (array == null) return;
+
+        float r = Mathf.Max(0.01f, currentRadius);
         float linearSpeed = angularSpeed * Mathf.Deg2Rad * r;
-        float dPhase = (linearSpeed * Time.fixedDeltaTime) / Mathf.Max(0.001f, _pathLength);
+        float dPhase = (linearSpeed * Time.fixedDeltaTime) / Mathf.Max(0.001f, pathLen);
 
         Vector3 axisN = rotationAxis.sqrMagnitude > 0.0001f ? rotationAxis.normalized : Vector3.right;
 
-        for (int i = 0; i < plates.Length; i++)
+        for (int i = 0; i < array.Length; i++)
         {
-            if (plates[i] == null) continue;
-            _phases[i] = Mathf.Repeat(_phases[i] + dPhase, 1f);
+            if (array[i] == null) continue;
+            phasesArray[i] = Mathf.Repeat(phasesArray[i] + dPhase, 1f);
 
-            Vector3 localPos = SampleStadiumPath(_phases[i]);
+            Vector3 localPos = SampleStadiumPath(phasesArray[i], currentRadius);
             Vector3 worldPos = transform.TransformPoint(localPos);
 
             Quaternion worldRot;
             if (plateAlwaysUpright)
             {
-                worldRot = transform.rotation * _initialLocalRotations[i];
+                worldRot = transform.rotation * initRots[i];
             }
             else
             {
-                // パス接線 (Z+) と外向き (Y+) で皿を向ける (水車式: 半円を進むと皿も回転する)
-                Vector3 tangent = ComputeTangent(_phases[i]);
-                // 外向き = rotationAxis × tangent → 直線では perp 方向、半円ではパス中心から外への方向
+                Vector3 tangent = ComputeTangent(phasesArray[i], currentRadius);
                 Vector3 outward = Vector3.Cross(axisN, tangent);
                 if (outward.sqrMagnitude < 0.0001f) outward = Vector3.up;
                 else outward = outward.normalized;
@@ -396,43 +485,57 @@ public class PinballWaterWheel : MonoBehaviour
                 if (worldTangent.sqrMagnitude > 0.0001f && worldOutward.sqrMagnitude > 0.0001f)
                 {
                     Quaternion pathRot = Quaternion.LookRotation(worldTangent, worldOutward);
-                    // 設置時のオフセットを掛けて、設置時の姿勢関係をパス進行方向に対して維持
-                    worldRot = pathRot * _pathRotationOffsets[i];
+                    worldRot = pathRot * pathRotOffsets[i];
                 }
                 else
                 {
-                    worldRot = transform.rotation * _initialLocalRotations[i];
+                    worldRot = transform.rotation * initRots[i];
                 }
             }
 
-            ApplyToPlate(i, worldPos, worldRot);
+            ApplyToPlate(array[i], rbs[i], worldPos, worldRot);
 
-            // Debug log (plate0 のみ 0.5 秒間隔)
-            if (logPlate0EachFrame && i == 0)
+            if (logFirst && logPlate0EachFrame && i == 0)
             {
                 _logTimer += Time.fixedDeltaTime;
                 if (_logTimer >= 0.5f)
                 {
                     _logTimer = 0f;
-                    Vector3 t = ComputeTangent(_phases[0]);
+                    Vector3 t = ComputeTangent(phasesArray[0], currentRadius);
                     Vector3 o = Vector3.Cross(axisN, t);
                     if (o.sqrMagnitude < 0.0001f) o = Vector3.up; else o = o.normalized;
                     Debug.Log(
-                        $"[WaterWheel] plate0 phase={_phases[0]:F3} alwaysUpright={plateAlwaysUpright}\n" +
+                        $"[WaterWheel] plate0 phase={phasesArray[0]:F3} alwaysUpright={plateAlwaysUpright}\n" +
                         $"  tangent(local)={t} outward(local)={o} axisN={axisN}\n" +
                         $"  worldTangent={transform.TransformDirection(t)} worldOutward={transform.TransformDirection(o)}\n" +
                         $"  worldRotEuler={worldRot.eulerAngles}\n" +
-                        $"  pathOffsetEuler={_pathRotationOffsets[0].eulerAngles}\n" +
-                        $"  shape={shape} pathLength={_pathLength:F3} radius={radius} stretchLength={stretchLength}",
+                        $"  pathOffsetEuler={pathRotOffsets[0].eulerAngles}\n" +
+                        $"  shape={shape} pathLength={pathLen:F3} radius={currentRadius} stretchLength={stretchLength}",
                         this);
                 }
             }
         }
     }
 
-    void ApplyToPlate(int i, Vector3 worldPos, Quaternion worldRot)
+    void UpdateGears()
     {
-        var rb = _plateRigidbodies[i];
+        Vector3 worldAxis = transform.TransformDirection(rotationAxis.normalized);
+        // Stadium形状ではパスの進行方向がAngleAxisの回転方向と逆になるため、歯車の回転も反転させる
+        float baseGearSpeed = (shape == WheelShape.Stadium) ? -angularSpeed : angularSpeed;
+        float gearSpeed = baseGearSpeed * gearSpeedMultiplier;
+
+        if (topGear != null)
+        {
+            topGear.Rotate(worldAxis, gearSpeed * Time.fixedDeltaTime, Space.World);
+        }
+        if (bottomGear != null)
+        {
+            bottomGear.Rotate(worldAxis, gearSpeed * Time.fixedDeltaTime, Space.World);
+        }
+    }
+
+    void ApplyToPlate(Transform t, Rigidbody rb, Vector3 worldPos, Quaternion worldRot)
+    {
         if (rb != null && rb.isKinematic)
         {
             rb.MovePosition(worldPos);
@@ -440,17 +543,12 @@ public class PinballWaterWheel : MonoBehaviour
         }
         else
         {
-            plates[i].position = worldPos;
-            plates[i].rotation = worldRot;
+            t.position = worldPos;
+            t.rotation = worldRot;
         }
     }
 
-    /// <summary>
-    /// Stadium パス上 phase (0~1) の位置をローカル空間で返す。
-    ///   Phase 0: +perp 側ストレート下端から開始
-    ///   経路: 右ストレート上昇 → 上半円 → 左ストレート下降 → 下半円 → ループ
-    /// </summary>
-    Vector3 SampleStadiumPath(float phase01)
+    Vector3 SampleStadiumPath(float phase01, float currentRadius)
     {
         Vector3 stretchN = stretchAxis.sqrMagnitude > 0.0001f ? stretchAxis.normalized : Vector3.up;
         Vector3 axisN = rotationAxis.sqrMagnitude > 0.0001f ? rotationAxis.normalized : Vector3.right;
@@ -459,7 +557,7 @@ public class PinballWaterWheel : MonoBehaviour
         else perp = perp.normalized;
 
         float L = stretchLength;
-        float r = Mathf.Max(0.01f, radius);
+        float r = Mathf.Max(0.01f, currentRadius);
         float total = 2f * L + 2f * Mathf.PI * r;
         float t = phase01 * total;
 
@@ -483,11 +581,7 @@ public class PinballWaterWheel : MonoBehaviour
         return stretchN * (-L / 2f) + r * (-Mathf.Cos(theta2) * perp - Mathf.Sin(theta2) * stretchN);
     }
 
-    /// <summary>
-    /// Stadium パス上 phase の解析的タンジェント (進行方向の単位ベクトル) をローカル空間で返す。
-    /// 数値微分は eps が小さすぎると差分が浮動小数点誤差に埋もれて 0 になるため使わない。
-    /// </summary>
-    Vector3 ComputeTangent(float phase01)
+    Vector3 ComputeTangent(float phase01, float currentRadius)
     {
         Vector3 stretchN = stretchAxis.sqrMagnitude > 0.0001f ? stretchAxis.normalized : Vector3.up;
         Vector3 axisN = rotationAxis.sqrMagnitude > 0.0001f ? rotationAxis.normalized : Vector3.right;
@@ -496,26 +590,20 @@ public class PinballWaterWheel : MonoBehaviour
         else perp = perp.normalized;
 
         float L = stretchLength;
-        float r = Mathf.Max(0.01f, radius);
+        float r = Mathf.Max(0.01f, currentRadius);
         float total = 2f * L + 2f * Mathf.PI * r;
         float t = Mathf.Repeat(phase01, 1f) * total;
 
-        // 右ストレート (上昇): 位置 = perp*r + stretchN*(-L/2 + t) → 接線 = stretchN
         if (t < L) return stretchN;
         t -= L;
-        // 上半円: 位置 = stretchN*(L/2) + r*(cos(θ)*perp + sin(θ)*stretchN), θ = t/r
-        //         接線 = -sin(θ)*perp + cos(θ)*stretchN
         if (t < Mathf.PI * r)
         {
             float theta = t / r;
             return (-Mathf.Sin(theta) * perp + Mathf.Cos(theta) * stretchN).normalized;
         }
         t -= Mathf.PI * r;
-        // 左ストレート (下降): 位置 = -perp*r + stretchN*(L/2 - t) → 接線 = -stretchN
         if (t < L) return -stretchN;
         t -= L;
-        // 下半円: 位置 = -stretchN*(L/2) + r*(-cos(θ)*perp - sin(θ)*stretchN), θ = t/r
-        //         接線 = sin(θ)*perp - cos(θ)*stretchN
         float theta2 = t / r;
         return (Mathf.Sin(theta2) * perp - Mathf.Cos(theta2) * stretchN).normalized;
     }
@@ -526,45 +614,61 @@ public class PinballWaterWheel : MonoBehaviour
         Gizmos.color = Color.yellow;
         Gizmos.DrawLine(transform.position - worldAxis * 0.5f, transform.position + worldAxis * 0.5f);
 
-        Gizmos.color = new Color(0f, 1f, 1f, 0.6f);
         if (shape == WheelShape.Circle)
         {
-            // 円の軌道
-            if (plates != null)
+            DrawWheelGizmo(radius);
+            if (caterpillarPrefab != null || (caterpillarPlates != null && caterpillarPlates.Length > 0))
             {
-                foreach (var plate in plates)
-                {
-                    if (plate == null) continue;
-                    float r = Vector3.Distance(plate.position, transform.position);
-                    DrawCircleGizmo(transform.position, worldAxis, r, 36);
-                }
+                DrawWheelGizmo(radius + caterpillarRadiusOffset);
             }
         }
         else
         {
-            // Stadium の軌道をサンプリングして描画
-            const int seg = 80;
-            Vector3 prev = transform.TransformPoint(SampleStadiumPath(0f));
-            for (int i = 1; i <= seg; i++)
+            DrawStadiumGizmo(radius);
+            if (caterpillarPrefab != null || (caterpillarPlates != null && caterpillarPlates.Length > 0))
             {
-                Vector3 cur = transform.TransformPoint(SampleStadiumPath((float)i / seg));
-                Gizmos.DrawLine(prev, cur);
-                prev = cur;
+                DrawStadiumGizmo(radius + caterpillarRadiusOffset);
             }
         }
 
-        // 各皿の +Y (緑) / +Z (青) 矢印を描画 (回転が適用されているか目視確認)
-        if (drawPlateAxesGizmo && plates != null)
+        if (drawPlateAxesGizmo)
         {
-            float arrowLen = 0.15f;
-            foreach (var plate in plates)
-            {
-                if (plate == null) continue;
-                Gizmos.color = Color.green;
-                Gizmos.DrawLine(plate.position, plate.position + plate.up * arrowLen);
-                Gizmos.color = Color.blue;
-                Gizmos.DrawLine(plate.position, plate.position + plate.forward * arrowLen);
-            }
+            DrawPlateAxes(plates);
+            DrawPlateAxes(caterpillarPlates);
+        }
+    }
+
+    void DrawWheelGizmo(float currentRadius)
+    {
+        Vector3 worldAxis = transform.TransformDirection(rotationAxis.normalized);
+        Gizmos.color = new Color(0f, 1f, 1f, 0.6f);
+        DrawCircleGizmo(transform.position, worldAxis, currentRadius, 36);
+    }
+
+    void DrawStadiumGizmo(float currentRadius)
+    {
+        Gizmos.color = new Color(0f, 1f, 1f, 0.6f);
+        const int seg = 80;
+        Vector3 prev = transform.TransformPoint(SampleStadiumPath(0f, currentRadius));
+        for (int i = 1; i <= seg; i++)
+        {
+            Vector3 cur = transform.TransformPoint(SampleStadiumPath((float)i / seg, currentRadius));
+            Gizmos.DrawLine(prev, cur);
+            prev = cur;
+        }
+    }
+
+    void DrawPlateAxes(Transform[] array)
+    {
+        if (array == null) return;
+        float arrowLen = 0.15f;
+        foreach (var plate in array)
+        {
+            if (plate == null) continue;
+            Gizmos.color = Color.green;
+            Gizmos.DrawLine(plate.position, plate.position + plate.up * arrowLen);
+            Gizmos.color = Color.blue;
+            Gizmos.DrawLine(plate.position, plate.position + plate.forward * arrowLen);
         }
     }
 
