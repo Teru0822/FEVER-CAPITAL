@@ -65,6 +65,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: c0850b5e49385154bbe352244405fff1, type: 3}
       insertIndex: -1
       addedObject: {fileID: 3777991553024814478}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: c0850b5e49385154bbe352244405fff1, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 3777991553024814479}
   m_SourcePrefab: {fileID: 100100000, guid: c0850b5e49385154bbe352244405fff1, type: 3}
 --- !u!1 &2691649839483997048 stripped
 GameObject:
@@ -129,7 +132,24 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 69a132aa3fec4c44cab2307c2e4a4956, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::PinballBallController
   mass: 0.5
   bounciness: 0.5
+--- !u!114 &3777991553024814479
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2691649839483997048}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 72fae019b6a646ef9b59323bd5bbb0da, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::BallSurfaceAudio
+  ballMaterial: {fileID: 0}
+  crossfadeTime: 0.08
+  airExitTime: 0.1
+  impactCooldown: 0.05
+  rollNormalDotMin: 0.3

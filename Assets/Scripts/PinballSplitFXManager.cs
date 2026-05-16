@@ -134,25 +134,8 @@ public class PinballSplitFXManager : MonoBehaviour
     }
 
     /// <summary>
-    /// ボールが壁/床/消費済ピン等に衝突した時に呼ぶ。衝突速度に応じて音量が変わる。
-    /// 一定速度未満は無音。フレーム上限内のみ発火。グローバル既定 SFX を使用。
-    /// </summary>
-    public void OnImpact(Vector3 worldPos, float impactSpeed)
-    {
-        if (_config == null) return;
-        if (impactSpeed < _config.wallImpactMinSpeed) return;
-        PlayPooledOneShot(
-            worldPos,
-            _config.wallImpactSfxClip,
-            _config.wallImpactSfxVolume,
-            _config.wallImpactPitchVariance,
-            impactSpeed,
-            _config.wallImpactReferenceSpeed);
-    }
-
-    /// <summary>
     /// AudioSource プール経由でワンショット再生する汎用 API。
-    /// 衝突 SFX (グローバル/サーフェス毎) の共通入口。フレーム上限と速度スケールに対応。
+    /// 衝突 SFX (BallSurfaceAudio 等) の共通入口。フレーム上限と速度スケールに対応。
     /// </summary>
     /// <param name="impactSpeed">速度に応じた音量スケール用 (0 以下なら速度スケール無効、フル音量)</param>
     /// <param name="referenceSpeed">この速度で音量最大 (impactSpeed > 0 の時のみ有効)</param>
