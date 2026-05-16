@@ -1296,6 +1296,71 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!1001 &112801486
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 654441575}
+    m_Modifications:
+    - target: {fileID: -8679921383154817045, guid: 9bae4ae811a090b45815aacd547c7ee3, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 1.1732097
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 9bae4ae811a090b45815aacd547c7ee3, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 1.1732097
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 9bae4ae811a090b45815aacd547c7ee3, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -0.0014691353
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 9bae4ae811a090b45815aacd547c7ee3, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0.63199997
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 9bae4ae811a090b45815aacd547c7ee3, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -0.034999847
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 9bae4ae811a090b45815aacd547c7ee3, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.7071067
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 9bae4ae811a090b45815aacd547c7ee3, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0.7071068
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 9bae4ae811a090b45815aacd547c7ee3, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 9bae4ae811a090b45815aacd547c7ee3, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 9bae4ae811a090b45815aacd547c7ee3, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 9bae4ae811a090b45815aacd547c7ee3, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 9bae4ae811a090b45815aacd547c7ee3, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 919132149155446097, guid: 9bae4ae811a090b45815aacd547c7ee3, type: 3}
+      propertyPath: m_Name
+      value: hasira
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 9bae4ae811a090b45815aacd547c7ee3, type: 3}
 --- !u!1 &115861134 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: 17fc782ddd5a8e843a5de8528ec1325c, type: 3}
@@ -4772,15 +4837,55 @@ MonoBehaviour:
   stretchAxis: {x: 0, y: 1, z: 0}
   plates: []
   autoAddKinematicRigidbody: 0
-  platePrefab: {fileID: 2594009834469055647, guid: 25702887f4a35c24ea9a892467a93ce1, type: 3}
+  platePrefab: {fileID: 712417026436960441, guid: ea1f0ff5b51644f458c5f759d070b019, type: 3}
   autoSpawnPlateCount: 20
-  caterpillarPlates: []
+  caterpillarPlates:
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
   caterpillarPrefab: {fileID: 1043390627999683746, guid: 2724c20fce2f69648bb964219d83abfb, type: 3}
   autoSpawnCaterpillarCount: 40
   caterpillarRadiusOffset: -0.05
-  topGear: {fileID: 1006951671722149425, guid: 931842fa386326a4f9944b4b2055a863, type: 3}
-  bottomGear: {fileID: 8049251451405257510, guid: 931842fa386326a4f9944b4b2055a863, type: 3}
-  gearSpeedMultiplier: 1.03
+  topGear: {fileID: 7332529175110475146, guid: 931842fa386326a4f9944b4b2055a863, type: 3}
+  bottomGear: {fileID: 0}
+  gearSpeedMultiplier: 1.033
   rotationAxis: {x: 0, y: 0, z: -1}
   angularSpeed: 60
   plateAlwaysUpright: 0
@@ -4803,10 +4908,11 @@ Transform:
   m_GameObject: {fileID: 654441573}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -1.598, y: 0.29752016, z: 0.5911999}
+  m_LocalPosition: {x: -1.575, y: 0.29752016, z: 0.525}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 1593726997}
   m_Father: {fileID: 1276542976}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &666016243
@@ -10968,6 +11074,11 @@ Transform:
 Transform:
   m_CorrespondingSourceObject: {fileID: 2436418814499764902, guid: e3bad074fbde79940bd345e2383da251, type: 3}
   m_PrefabInstance: {fileID: 716054384}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &1593726997 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: 9bae4ae811a090b45815aacd547c7ee3, type: 3}
+  m_PrefabInstance: {fileID: 112801486}
   m_PrefabAsset: {fileID: 0}
 --- !u!1 &1595151646
 GameObject:
