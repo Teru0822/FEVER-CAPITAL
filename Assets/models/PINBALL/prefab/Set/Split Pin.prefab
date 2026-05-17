@@ -191,6 +191,7 @@ GameObject:
   - component: {fileID: 1617949766495994869}
   - component: {fileID: 5012726106527387052}
   - component: {fileID: 7108506673030315875}
+  - component: {fileID: -3460876013168300382}
   m_Layer: 0
   m_Name: Split Pin
   m_TagString: Split Pin
@@ -266,6 +267,19 @@ MonoBehaviour:
   pulseRiseFraction: 0.12
   pulseDecayEndFraction: 0.55
   keepAnimatingWhenConsumed: 0
+--- !u!114 &-3460876013168300382
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6260802082660184894}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9f83bcc098354e94b3ad7570a487e0fe, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SurfaceTag
+  profile: {fileID: 11400000, guid: 3fd18ddd9f09b9449a1ca6d5ebf9f063, type: 2}
 --- !u!1 &8229699036343998387
 GameObject:
   m_ObjectHideFlags: 0
