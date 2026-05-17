@@ -34,6 +34,9 @@ public class PinballWaterWheel : MonoBehaviour
     [SerializeField] private Vector3 stretchAxis = Vector3.up;
 
     [Header("皿")]
+    [Tooltip("皿が回る軌道の半径オフセット (radius からの増減)。0 で従来通り (= radius)。\nマイナスで皿だけ内側 (キャタピラに近づける)、プラスで皿だけ外側。\nキャタピラ軌道には影響しない (caterpillarRadiusOffset は radius を基準にする)")]
+    [SerializeField] private float plateRadiusOffset = 0f;
+
     [Tooltip("回転させる皿 Transform 群。手動配置する場合に使用。\n下の Plate Prefab + Auto Spawn Plate Count を指定すると自動配置に切替 (この配列は上書き)")]
     [SerializeField] private Transform[] plates;
 
@@ -195,7 +198,7 @@ public class PinballWaterWheel : MonoBehaviour
         }
 
         // 初期化処理
-        _pathLength = 2f * stretchLength + 2f * Mathf.PI * Mathf.Max(0.01f, radius);
+        _pathLength = 2f * stretchLength + 2f * Mathf.PI * Mathf.Max(0.01f, radius + plateRadiusOffset);
         _caterpillarPathLength = 2f * stretchLength + 2f * Mathf.PI * Mathf.Max(0.01f, radius + caterpillarRadiusOffset);
 
         if (plates == null || plates.Length == 0)
@@ -203,7 +206,7 @@ public class PinballWaterWheel : MonoBehaviour
             Debug.LogWarning("[PinballWaterWheel] plates 配列が空です。手動配置するか Plate Prefab + Auto Spawn Plate Count を設定してください。", this);
         }
 
-        InitPlates(plates, radius, out _initialLocalOffsets, out _initialLocalRotations, out _plateRigidbodies, out _phases, out _pathRotationOffsets);
+        InitPlates(plates, radius + plateRadiusOffset, out _initialLocalOffsets, out _initialLocalRotations, out _plateRigidbodies, out _phases, out _pathRotationOffsets);
         InitPlates(caterpillarPlates, radius + caterpillarRadiusOffset, out _caterpillarInitialOffsets, out _caterpillarInitialRotations, out _caterpillarRigidbodies, out _caterpillarPhases, out _caterpillarPathRotationOffsets);
     }
 
@@ -297,7 +300,7 @@ public class PinballWaterWheel : MonoBehaviour
     void AutoSpawnPlates()
     {
         plates = new Transform[autoSpawnPlateCount];
-        SpawnAndSetupArray(autoSpawnPlateCount, platePrefab, plates, radius);
+        SpawnAndSetupArray(autoSpawnPlateCount, platePrefab, plates, radius + plateRadiusOffset);
     }
     
     void AutoSpawnCaterpillars()
@@ -443,7 +446,7 @@ public class PinballWaterWheel : MonoBehaviour
 
     void FixedUpdateStadium()
     {
-        UpdateStadiumArray(plates, radius, _pathLength, _phases, _initialLocalRotations, _pathRotationOffsets, _plateRigidbodies, true);
+        UpdateStadiumArray(plates, radius + plateRadiusOffset, _pathLength, _phases, _initialLocalRotations, _pathRotationOffsets, _plateRigidbodies, true);
         UpdateStadiumArray(caterpillarPlates, radius + caterpillarRadiusOffset, _caterpillarPathLength, _caterpillarPhases, _caterpillarInitialRotations, _caterpillarPathRotationOffsets, _caterpillarRigidbodies, false);
 
         UpdateGears();
@@ -616,7 +619,7 @@ public class PinballWaterWheel : MonoBehaviour
 
         if (shape == WheelShape.Circle)
         {
-            DrawWheelGizmo(radius);
+            DrawWheelGizmo(radius + plateRadiusOffset);
             if (caterpillarPrefab != null || (caterpillarPlates != null && caterpillarPlates.Length > 0))
             {
                 DrawWheelGizmo(radius + caterpillarRadiusOffset);
@@ -624,7 +627,7 @@ public class PinballWaterWheel : MonoBehaviour
         }
         else
         {
-            DrawStadiumGizmo(radius);
+            DrawStadiumGizmo(radius + plateRadiusOffset);
             if (caterpillarPrefab != null || (caterpillarPlates != null && caterpillarPlates.Length > 0))
             {
                 DrawStadiumGizmo(radius + caterpillarRadiusOffset);

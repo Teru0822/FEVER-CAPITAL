@@ -4832,9 +4832,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PinballWaterWheel
   shape: 1
-  radius: 0.1
+  radius: 0.12
   stretchLength: 1.2
   stretchAxis: {x: 0, y: 1, z: 0}
+  plateRadiusOffset: -0.02
   plates: []
   autoAddKinematicRigidbody: 0
   platePrefab: {fileID: 712417026436960441, guid: ea1f0ff5b51644f458c5f759d070b019, type: 3}
@@ -4882,7 +4883,7 @@ MonoBehaviour:
   - {fileID: 0}
   caterpillarPrefab: {fileID: 1043390627999683746, guid: 2724c20fce2f69648bb964219d83abfb, type: 3}
   autoSpawnCaterpillarCount: 40
-  caterpillarRadiusOffset: -0.03
+  caterpillarRadiusOffset: -0.05
   topGear: {fileID: 7332529175110475146, guid: 931842fa386326a4f9944b4b2055a863, type: 3}
   bottomGear: {fileID: 0}
   gearSpeedMultiplier: 1.033
