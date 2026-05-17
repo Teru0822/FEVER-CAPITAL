@@ -19,6 +19,9 @@ public class PinballPlungerController : MonoBehaviour
     [Tooltip("減衰係数（0にすると純粋な単振動）")]
     [SerializeField] private float damping = 1f;
 
+    [Tooltip("プランジャーの最大速度 (m/s)。ばね振動でこれを超えそうな時にクランプ。\nコライダーすり抜けの保険 (ContinuousDynamic CCD と併用)")]
+    [SerializeField] private float maxVelocity = 12f;
+
     [Header("操作設定")]
     [Tooltip("SPACEキー押下時のZ軸移動速度")]
     [SerializeField] private float pullSpeed = 2f;
@@ -79,8 +82,9 @@ public class PinballPlungerController : MonoBehaviour
                        | RigidbodyConstraints.FreezeRotation;
         rb.useGravity = false;
 
-        // すり抜け防止：高速移動時も連続的に衝突検出
-        rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
+        // すり抜け防止：動的 Rigidbody (ボール) との高速衝突にも CCD を効かせる。
+        // Continuous は静的コライダー相手のみなので、動的同士のすり抜けには ContinuousDynamic が必要。
+        rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
 
         // 衝突ルールを設定
         SetupCollisionIgnore();
@@ -178,6 +182,15 @@ public class PinballPlungerController : MonoBehaviour
             float springForce = -springConstant * displacement;
             float dampForce   = -damping * rb.linearVelocity.z;
             rb.AddForce(new Vector3(0f, 0f, springForce + dampForce), ForceMode.Force);
+
+            // 振動が暴れすぎてボールを貫通するのを保険的にカット (Z 軸のみ)
+            float vz = rb.linearVelocity.z;
+            if (Mathf.Abs(vz) > maxVelocity)
+            {
+                Vector3 vel = rb.linearVelocity;
+                vel.z = Mathf.Sign(vz) * maxVelocity;
+                rb.linearVelocity = vel;
+            }
         }
     }
 }
